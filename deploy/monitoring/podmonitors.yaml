@@ -1,0 +1,14 @@
+# Requires kube-prometheus-stack (see Makefile target `monitoring`).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata: {name: lifeboat-demo-web, namespace: lifeboat-demo, labels: {release: kps}}
+spec:
+  selector: {matchExpressions: [{key: lifeboat.io/tier, operator: In, values: [C1, C2]}]}
+  podMetricsEndpoints: [{port: http, path: /metrics, interval: 5s}]
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata: {name: lifeboat, namespace: lifeboat, labels: {release: kps}}
+spec:
+  selector: {matchLabels: {app: lifeboat}}
+  podMetricsEndpoints: [{port: metrics, interval: 5s}]

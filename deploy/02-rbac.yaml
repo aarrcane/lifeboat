@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: lifeboat, namespace: lifeboat}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: lifeboat}
+rules:
+  - {apiGroups: [""], resources: [nodes, pods], verbs: [get, list, watch]}
+  - {apiGroups: [""], resources: [configmaps], verbs: [get, list, patch]}
+  - {apiGroups: [batch], resources: [jobs], verbs: [get, list, patch]}
+  - {apiGroups: [apps], resources: [deployments], verbs: [get, list]}
+  - {apiGroups: [apps], resources: [deployments/scale], verbs: [get, patch]}
+  - {apiGroups: [coordination.k8s.io], resources: [leases], verbs: [get, create, update, patch]}
+  - {apiGroups: [lifeboat.sit.edu], resources: [triageplans], verbs: [get, list, watch, create, update, patch]}
+  - {apiGroups: [apiextensions.k8s.io], resources: [customresourcedefinitions], verbs: [list, watch]}
+  - {apiGroups: [""], resources: [namespaces], verbs: [list, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: lifeboat}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: lifeboat}
+subjects: [{kind: ServiceAccount, name: lifeboat, namespace: lifeboat}]

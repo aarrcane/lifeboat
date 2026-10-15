@@ -1,0 +1,30 @@
+# Baseline B0 = plain pod priority. These classes are used by every setup for fairness.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: lifeboat-c1}
+value: 1000
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: lifeboat-c2}
+value: 800
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: lifeboat-c3}
+value: 400
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: lifeboat-c4}
+value: 200
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: lifeboat-placeholder}
+value: -10
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: lifeboat-system}
+value: 2000

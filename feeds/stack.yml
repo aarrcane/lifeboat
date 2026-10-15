@@ -1,0 +1,18 @@
+# OpenFaaS (faas-netes on k3s). Build: faas-cli build -f feeds/stack.yml
+version: 1.0
+provider:
+  name: openfaas
+  gateway: http://127.0.0.1:8080
+functions:
+  pub-feed:
+    lang: python3-http
+    handler: ./feeds
+    image: lifeboat/pub-feed:latest
+    environment: {PUB_URL: "SET_ME", LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"}
+    annotations: {topic: cron-function, schedule: "*/2 * * * *"}
+  nea-feed:
+    lang: python3-http
+    handler: ./feeds
+    image: lifeboat/nea-feed:latest
+    environment: {NEA_URL: "SET_ME", LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"}
+    annotations: {topic: cron-function, schedule: "*/5 * * * *"}

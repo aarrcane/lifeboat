@@ -1,0 +1,5 @@
+kopf>=1.37
+kubernetes>=29.0
+prometheus-client>=0.20
+requests>=2.31
+boto3>=1.34

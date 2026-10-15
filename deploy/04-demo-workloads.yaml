@@ -1,0 +1,121 @@
+# Tiered demo workloads. Label lifeboat.io/tier is how Lifeboat finds them.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: c1-emergency, namespace: lifeboat-demo, labels: {lifeboat.io/tier: C1}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: c1-emergency}}
+  template:
+    metadata: {labels: {app: c1-emergency, lifeboat.io/tier: C1}}
+    spec:
+      priorityClassName: lifeboat-c1
+      containers:
+        - name: web
+          image: lifeboat/webapp:latest
+          imagePullPolicy: IfNotPresent
+          env: [{name: TIER, value: C1}]
+          ports: [{name: http, containerPort: 8000}]
+          resources: {requests: {cpu: 250m, memory: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: c1-emergency, namespace: lifeboat-demo}
+spec: {selector: {app: c1-emergency}, ports: [{port: 80, targetPort: 8000}]}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: c2-features, namespace: lifeboat-demo}
+data: {degraded: "false"}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: c2-portal, namespace: lifeboat-demo, labels: {lifeboat.io/tier: C2}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: c2-portal}}
+  template:
+    metadata: {labels: {app: c2-portal, lifeboat.io/tier: C2}}
+    spec:
+      priorityClassName: lifeboat-c2
+      volumes: [{name: features, configMap: {name: c2-features}}]
+      containers:
+        - name: web
+          image: lifeboat/webapp:latest
+          imagePullPolicy: IfNotPresent
+          env: [{name: TIER, value: C2}]
+          volumeMounts: [{name: features, mountPath: /etc/lifeboat/features}]
+          ports: [{name: http, containerPort: 8000}]
+          resources: {requests: {cpu: 250m, memory: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: c2-portal, namespace: lifeboat-demo}
+spec: {selector: {app: c2-portal}, ports: [{port: 80, targetPort: 8000}]}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: c3-analytics
+  namespace: lifeboat-demo
+  labels: {lifeboat.io/tier: C3}
+  annotations: {lifeboat.io/restart-seconds: "20"}
+spec:
+  parallelism: 2
+  completions: 2
+  backoffLimit: 20
+  template:
+    metadata: {labels: {lifeboat.io/tier: C3}}
+    spec:
+      restartPolicy: OnFailure
+      terminationGracePeriodSeconds: 30
+      priorityClassName: lifeboat-c3
+      containers:
+        - name: worker
+          image: lifeboat/worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: WORK_NAME, value: c3-analytics}
+            - {name: LIFEBOAT_CHECKPOINT_BACKEND, value: s3}
+            - {name: LIFEBOAT_S3_BUCKET, value: lifeboat-checkpoints}
+          resources: {requests: {cpu: 500m, memory: 64Mi}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: c4-backup
+  namespace: lifeboat-demo
+  labels: {lifeboat.io/tier: C4}
+  annotations: {lifeboat.io/restart-seconds: "10", lifeboat.io/overdue: "false"}
+spec:
+  backoffLimit: 20
+  template:
+    metadata: {labels: {lifeboat.io/tier: C4}}
+    spec:
+      restartPolicy: OnFailure
+      terminationGracePeriodSeconds: 30
+      priorityClassName: lifeboat-c4
+      containers:
+        - name: worker
+          image: lifeboat/worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: WORK_NAME, value: c4-backup}
+            - {name: LIFEBOAT_CHECKPOINT_BACKEND, value: s3}
+            - {name: LIFEBOAT_S3_BUCKET, value: lifeboat-checkpoints}
+          resources: {requests: {cpu: 500m, memory: 64Mi}}
+---
+# Spare-room placeholders: baseline B1 (kept free) and Lifeboat's L0/L1 headroom.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: placeholder, namespace: lifeboat-demo, labels: {lifeboat.io/tier: placeholder}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: placeholder}}
+  template:
+    metadata: {labels: {app: placeholder, lifeboat.io/tier: placeholder}}
+    spec:
+      priorityClassName: lifeboat-placeholder
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          resources: {requests: {cpu: 500m, memory: 16Mi}}
