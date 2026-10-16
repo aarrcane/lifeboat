@@ -39,7 +39,7 @@ class Monitor:
         p95 = self.query(self.cfg.q_c1_p95)
         slow = p95 is not None and p95 > self.cfg.c1_latency_target_s
         try:
-            stuck = discovery.c1_pending_pods(self.cfg) > 0
+            stuck = discovery.c1_unschedulable_pods(self.cfg) > 0
         except Exception as e:
             log.warning("pending-pod check failed: %s", e)
             stuck = False

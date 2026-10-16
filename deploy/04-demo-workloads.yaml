@@ -60,8 +60,8 @@ metadata:
   labels: {lifeboat.io/tier: C3}
   annotations: {lifeboat.io/restart-seconds: "20"}
 spec:
-  parallelism: 2
-  completions: 2
+  parallelism: 1                  # ONE pod per checkpoint name: two pods sharing WORK_NAME
+  completions: 1                  # would overwrite each other's progress (breaks E3)
   backoffLimit: 20
   template:
     metadata: {labels: {lifeboat.io/tier: C3}}
@@ -74,10 +74,10 @@ spec:
           image: lifeboat/worker:latest
           imagePullPolicy: IfNotPresent
           env:
+          envFrom: [{secretRef: {name: lifeboat-s3}}]
+          env:
             - {name: WORK_NAME, value: c3-analytics}
-            - {name: LIFEBOAT_CHECKPOINT_BACKEND, value: s3}
-            - {name: LIFEBOAT_S3_BUCKET, value: lifeboat-checkpoints}
-          resources: {requests: {cpu: 500m, memory: 64Mi}}
+          resources: {requests: {cpu: "1", memory: 64Mi}}     # same room as the old 2 x 500m
 ---
 apiVersion: batch/v1
 kind: Job
@@ -99,9 +99,9 @@ spec:
           image: lifeboat/worker:latest
           imagePullPolicy: IfNotPresent
           env:
+          envFrom: [{secretRef: {name: lifeboat-s3}}]
+          env:
             - {name: WORK_NAME, value: c4-backup}
-            - {name: LIFEBOAT_CHECKPOINT_BACKEND, value: s3}
-            - {name: LIFEBOAT_S3_BUCKET, value: lifeboat-checkpoints}
           resources: {requests: {cpu: 500m, memory: 64Mi}}
 ---
 # Spare-room placeholders: baseline B1 (kept free) and Lifeboat's L0/L1 headroom.

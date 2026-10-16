@@ -20,12 +20,12 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 ## Quick start (laptop, k3s)
 ```bash
 pip install -r requirements-dev.txt && make test        # logic tests, no cluster needed
-make k3s-import deploy monitoring workloads              # images -> k3s, controller, Prometheus, demo tiers
+make k3s-import deploy monitoring workloads              # images -> k3s, MinIO, controller, Prometheus, demo tiers
 python scripts/make_scenario.py
 python -m feeds.replay data/scenario_flash_flood.jsonl --speed 10   # run inside the cluster network
 kubectl -n lifeboat get triageplans current -o yaml -w   # watch the plan
 ```
-Set `LIFEBOAT_CHECKPOINT_BACKEND=file` (default) for quick tests, `s3` + `LIFEBOAT_S3_ENDPOINT` for MinIO/AWS.
+In the cluster, checkpoints go to S3: `deploy/05-checkpoint-store.yaml` runs MinIO and puts the same `lifeboat-s3` Secret in both namespaces (switch it to real S3 for the AWS run). The `file` backend is only for unit tests and running the worker on your laptop, since pods don't share `/tmp`.
 
 ## Baselines
 - **B0** pod priority only: apply `deploy/01-priorityclasses.yaml` + `04-demo-workloads.yaml`, do not deploy Lifeboat.

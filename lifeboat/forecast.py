@@ -27,17 +27,34 @@ class Holt:
 
 
 class TrafficForecaster:
-    """Tracks cluster-wide RPS; a slow baseline only learns while things are normal."""
+    """Tracks cluster-wide RPS against a slow baseline of normal traffic.
 
-    def __init__(self, alpha: float, beta: float, horizon: int, x: float, y: float):
+    The baseline is seeded from the first `warmup` samples (no vote until then) and
+    afterwards only learns from samples the forecaster itself judges normal. It must not
+    depend on the voter's level: our own L1 vote would freeze it at its seed forever.
+    """
+
+    def __init__(self, alpha: float, beta: float, horizon: int, x: float, y: float,
+                 warmup: int = 8, learn_rate: float = 0.02):
         self.holt = Holt(alpha, beta)
         self.horizon, self.x, self.y = horizon, x, y
+        self.warmup, self.learn_rate = max(1, warmup), learn_rate
+        self.samples = 0
+        self._warm_sum = 0.0
         self.baseline = 1.0
 
-    def observe(self, rps: float, level: Level) -> None:
+    @property
+    def warming_up(self) -> bool:
+        return self.samples < self.warmup
+
+    def observe(self, rps: float) -> None:
         self.holt.update(rps)
-        if level == Level.L0:
-            self.baseline = max(1.0, 0.98 * self.baseline + 0.02 * rps)
+        self.samples += 1
+        if self.samples <= self.warmup:                       # mean of the first samples
+            self._warm_sum += rps
+            self.baseline = max(1.0, self._warm_sum / self.samples)
+        elif self.ratio() < self.x:                           # only learn from normal traffic
+            self.baseline = max(1.0, (1 - self.learn_rate) * self.baseline + self.learn_rate * rps)
 
     def predicted(self) -> float:
         return self.holt.forecast(self.horizon)
@@ -46,5 +63,7 @@ class TrafficForecaster:
         return self.predicted() / self.baseline
 
     def level(self) -> Level:
+        if self.warming_up:
+            return Level.L0                                   # no baseline yet => no vote
         r = self.ratio()
         return Level.L2 if r >= self.y else Level.L1 if r >= self.x else Level.L0

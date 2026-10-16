@@ -60,8 +60,18 @@ def free_millis() -> float:
     return float(alloc - used)
 
 
-def c1_pending_pods(cfg: Config) -> int:
+def is_unschedulable(pod) -> bool:
+    """Stuck waiting for room: PodScheduled=False/Unschedulable. Plain phase=Pending would also
+    count pods that are only pulling images or starting, so every C1 scale-up by Lifeboat
+    itself would look like C1 struggling and trip L3."""
+    for c in (pod.status.conditions or []) if pod.status else []:
+        if c.type == "PodScheduled" and c.status == "False" and c.reason == "Unschedulable":
+            return True
+    return False
+
+
+def c1_unschedulable_pods(cfg: Config) -> int:
     core = client.CoreV1Api()
     pods = core.list_namespaced_pod(cfg.workload_namespace, label_selector=f"{TIER_LABEL}=C1",
                                     field_selector="status.phase=Pending").items
-    return len(pods)
+    return sum(1 for p in pods if is_unschedulable(p))

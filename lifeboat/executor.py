@@ -15,6 +15,7 @@ log = logging.getLogger("lifeboat.executor")
 
 
 class Actions(Protocol):
+    def prepare(self, steps: list[Step]) -> None: ...      # e.g. ask apps to checkpoint, wait ONCE
     def read_original(self, s: Step) -> dict: ...
     def apply(self, s: Step) -> None: ...
     def revert(self, s: Step) -> None: ...
@@ -92,9 +93,17 @@ class Executor:
 
     # -- 2. do each unfinished step, mark it done
     def _apply_pending(self, rec: PlanRecord, takeover: int) -> None:
-        for s in list(rec.steps.values()):
-            if s.done:
-                continue
+        pending = [s for s in rec.steps.values() if not s.done]
+        if not pending:
+            return
+        try:
+            self.actions.prepare(pending)                        # one bounded wait for all pauses
+        except Exception:
+            log.exception("prepare failed, pausing anyway (apps also save on SIGTERM)")
+        leader, now_takeover = self.elector.try_acquire_or_renew()   # renew after the wait
+        if not leader or now_takeover != takeover:
+            raise Fenced("lost lease while preparing")
+        for s in pending:
             if not self.elector.still_leader(takeover):          # verify Lease ownership
                 raise Fenced("lost lease")
             try:

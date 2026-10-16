@@ -3,8 +3,6 @@ kind: Secret
 metadata: {name: lifeboat-secrets, namespace: lifeboat}
 stringData:
   LIFEBOAT_HMAC_SECRET: change-me-before-demo
-  AWS_ACCESS_KEY_ID: ""
-  AWS_SECRET_ACCESS_KEY: ""
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -30,12 +28,10 @@ spec:
         - name: lifeboat
           image: lifeboat/controller:latest
           imagePullPolicy: IfNotPresent
-          envFrom: [{secretRef: {name: lifeboat-secrets}}]
+          # lifeboat-s3 (05-checkpoint-store.yaml): same bucket/endpoint/keys as the workers
+          envFrom: [{secretRef: {name: lifeboat-secrets}}, {secretRef: {name: lifeboat-s3}}]
           env:
             - {name: LIFEBOAT_IDENTITY, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
-            - {name: LIFEBOAT_CHECKPOINT_BACKEND, value: "s3"}      # "file" for quick laptop tests
-            - {name: LIFEBOAT_S3_BUCKET, value: "lifeboat-checkpoints"}
-            - {name: LIFEBOAT_S3_ENDPOINT, value: ""}               # MinIO URL on laptops
             - {name: LIFEBOAT_EARLY_WARNING, value: "true"}         # "false" => baseline B2
           ports:
             - {name: ingest, containerPort: 8081}

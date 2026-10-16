@@ -8,7 +8,7 @@ images:
 k3s-import: images
 	for i in controller webapp worker; do docker save lifeboat/$$i:latest | sudo k3s ctr images import -; done
 deploy:
-	kubectl apply -f deploy/00-namespaces-crd.yaml -f deploy/01-priorityclasses.yaml -f deploy/02-rbac.yaml -f deploy/03-lifeboat.yaml
+	kubectl apply -f deploy/00-namespaces-crd.yaml -f deploy/01-priorityclasses.yaml -f deploy/02-rbac.yaml -f deploy/05-checkpoint-store.yaml -f deploy/03-lifeboat.yaml
 workloads:
 	kubectl apply -f deploy/04-demo-workloads.yaml
 monitoring:

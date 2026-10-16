@@ -31,6 +31,8 @@ class FakeCluster:
     def __init__(self):
         self.state = {}
         self.apply_log = []
+        self.prepared = []
+        self.lose_lease_in_prepare = None
 
 
 class FakeActions:
@@ -41,6 +43,11 @@ class FakeActions:
         return {"suspend_job": {"suspend": True},
                 "scale_deployment": {"replicas": s.params.get("replicas")},
                 "set_configmap": {"data": s.params.get("data")}}[s.action]
+
+    def prepare(self, steps):
+        self.c.prepared.append([s.key for s in steps])
+        if self.c.lose_lease_in_prepare:
+            self.c.lose_lease_in_prepare()
 
     def read_original(self, s):
         return dict(self.c.state.get(s.key, {"suspend": False, "replicas": 3, "data": {}}))

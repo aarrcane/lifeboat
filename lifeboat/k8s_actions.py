@@ -51,8 +51,6 @@ class K8sActions:
         target = self._target(s)
         if self._current(s) == target:
             return                                         # already there: redo is a no-op
-        if s.params.get("checkpoint"):
-            self._checkpoint_before_pause(s)
         self._set(s, target)
 
     def revert(self, s: Step) -> None:
@@ -65,14 +63,26 @@ class K8sActions:
     def verify(self, s: Step) -> bool:
         return self._current(s) == self._target(s)
 
-    def _checkpoint_before_pause(self, s: Step) -> None:
-        """Ask the app to save; only a fully-uploaded checkpoint (manifest written last) counts."""
-        asked = self.cp.request(s.name)
-        deadline = time.time() + self.cfg.checkpoint_wait_s
-        while time.time() < deadline:
-            latest = self.cp.latest_ts(s.name)
-            if latest and latest >= asked:
-                return
-            time.sleep(1)
-        log.warning("no fresh checkpoint for %s within %ss, pausing anyway (app saves on SIGTERM)",
-                    s.name, self.cfg.checkpoint_wait_s)
+    def checkpoint_wait_s(self) -> float:
+        # the wait happens between lease renewals, so it must stay well inside the lease
+        return min(self.cfg.checkpoint_wait_s, self.cfg.lease_duration_s / 2)
+
+    def prepare(self, steps: list[Step]) -> None:
+        """Ask every app about to be paused to save NOW, then wait ONCE for all of them.
+        Only a fully-uploaded checkpoint (manifest written last) counts. Waiting per step
+        would take N x wait and outlive the Lease."""
+        asked = {}
+        for s in steps:
+            if s.params.get("checkpoint") and self._current(s) != self._target(s):
+                asked[s.name] = self.cp.request(s.name)
+        deadline = time.time() + self.checkpoint_wait_s()
+        while asked and time.time() < deadline:
+            for name, ts in list(asked.items()):
+                latest = self.cp.latest_ts(name)
+                if latest and latest >= ts:
+                    del asked[name]
+            if asked:
+                time.sleep(0.5)
+        if asked:
+            log.warning("no fresh checkpoint for %s within %.0fs, pausing anyway (apps save on SIGTERM)",
+                        sorted(asked), self.checkpoint_wait_s())

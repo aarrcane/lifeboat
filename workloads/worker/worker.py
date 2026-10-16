@@ -21,6 +21,7 @@ state = store.load(NAME) or {"unit": 0}
 print(f"[{NAME}] starting at unit {state['unit']}/{TOTAL}", flush=True)
 seen_request = store.last_request_ts(NAME)
 last_cp = time.time()
+last_poll = 0.0
 
 
 def save(reason: str) -> None:
@@ -39,7 +40,10 @@ while state["unit"] < TOTAL:
     time.sleep(UNIT_S)
     state["unit"] += 1
     now = time.time()
-    req = store.last_request_ts(NAME) if int(now) % 2 == 0 else seen_request
+    req = seen_request
+    if now - last_poll >= 1.0:                     # check for a "save now" request once a second
+        last_poll = now
+        req = store.last_request_ts(NAME)
     if req > seen_request:
         seen_request = req
         save("requested")

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from typing import Optional
@@ -70,6 +71,17 @@ class S3CheckpointStore(CheckpointStore):
         import boto3                                # lazy: tests don't need it
         self.bucket = bucket
         self.s3 = boto3.client("s3", endpoint_url=endpoint or None)
+        self._ensure_bucket()
+
+    def _ensure_bucket(self) -> None:
+        """Create the bucket if missing (fresh MinIO). Not fatal: S3 may just be slow to start."""
+        try:
+            self.s3.head_bucket(Bucket=self.bucket)
+        except Exception:
+            try:
+                self.s3.create_bucket(Bucket=self.bucket)
+            except Exception as e:
+                logging.getLogger("lifeboat.checkpoint").warning("bucket %s not ready: %s", self.bucket, e)
 
     def _put(self, key: str, data: bytes) -> None:
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=data)
@@ -82,7 +94,9 @@ class S3CheckpointStore(CheckpointStore):
 
 
 def from_env() -> CheckpointStore:
-    """Used by both the controller and the worker image (LIFEBOAT_* env vars)."""
+    """Used by both the controller and the worker image (LIFEBOAT_* env vars).
+    In a cluster this must be s3 (MinIO or AWS): with "file" the controller and each worker
+    have their own /tmp, so Lifeboat never sees an app's checkpoint."""
     if os.getenv("LIFEBOAT_CHECKPOINT_BACKEND", "file") == "s3":
         return S3CheckpointStore(os.getenv("LIFEBOAT_S3_BUCKET", "lifeboat-checkpoints"),
                                  os.getenv("LIFEBOAT_S3_ENDPOINT", ""))

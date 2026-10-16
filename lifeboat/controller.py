@@ -35,7 +35,7 @@ class Lifeboat:
         self.book = ingest.ReadingBook()
         self.voter = Voter(cfg.hmac_secret, cfg.calm_minutes * 60, cfg.vote_window_s)
         self.traffic = TrafficForecaster(cfg.holt_alpha, cfg.holt_beta, cfg.forecast_horizon_steps,
-                                         cfg.x_factor, cfg.y_factor)
+                                         cfg.x_factor, cfg.y_factor, cfg.forecast_warmup_samples)
         self.c1_holt = Holt(cfg.holt_alpha, cfg.holt_beta)
         self.store = K8sPlanStore(cfg.system_namespace, cfg.plan_name)
         self.executor = Executor(
@@ -75,7 +75,7 @@ class Lifeboat:
 
         if now - self._last_sample >= cfg.forecast_sample_s:          # S3: forecast source
             self._last_sample = now
-            self.traffic.observe(self.monitor.cluster_rps(), self.voter.level)
+            self.traffic.observe(self.monitor.cluster_rps())
             self.c1_holt.update(self.monitor.c1_rps())
             self.book.add(sign(Reading("S3", int(self.traffic.level()), now,
                                        now + cfg.forecast_ttl_s), cfg.hmac_secret))

@@ -51,6 +51,7 @@ class Config:
     forecast_horizon_steps: int = 12     # 12 * 15 s = 3 minutes ahead
     holt_alpha: float = 0.5
     holt_beta: float = 0.3
+    forecast_warmup_samples: int = 8     # 8 * 15 s = 2 min to learn normal traffic
 
     # --- planner
     cost_millis_per_rps: float = 20.0    # CPU millicores needed per request/s on C1
@@ -61,7 +62,7 @@ class Config:
 
     # --- executor / loop
     tick_s: float = 5.0
-    checkpoint_wait_s: float = 20.0
+    checkpoint_wait_s: float = 6.0       # ONE wait per tick for all pauses; kept < lease_duration_s / 2
 
     # --- checkpoints
     checkpoint_backend: str = "file"     # "file" | "s3"
