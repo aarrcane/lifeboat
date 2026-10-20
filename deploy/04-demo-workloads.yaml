@@ -73,7 +73,6 @@ spec:
         - name: worker
           image: lifeboat/worker:latest
           imagePullPolicy: IfNotPresent
-          env:
           envFrom: [{secretRef: {name: lifeboat-s3}}]
           env:
             - {name: WORK_NAME, value: c3-analytics}
@@ -98,7 +97,6 @@ spec:
         - name: worker
           image: lifeboat/worker:latest
           imagePullPolicy: IfNotPresent
-          env:
           envFrom: [{secretRef: {name: lifeboat-s3}}]
           env:
             - {name: WORK_NAME, value: c4-backup}

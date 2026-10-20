@@ -17,15 +17,18 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 | `loadtest/` | Locust 20x surge | E1/E2 |
 | `tests/` | unit tests incl. crash-takeover scenario (Fig. 2) | E4/E5 |
 
-## Quick start (laptop, k3s)
+## Quick start (laptop: Docker + k3d + kubectl + helm)
+Full guide, AWS run and troubleshooting: **[docs/CLUSTER.md](docs/CLUSTER.md)**. `make help` lists every target.
 ```bash
 pip install -r requirements-dev.txt && make test        # logic tests, no cluster needed
-make k3s-import deploy monitoring workloads              # images -> k3s, MinIO, controller, Prometheus, demo tiers
-python scripts/make_scenario.py
-python -m feeds.replay data/scenario_flash_flood.jsonl --speed 10   # run inside the cluster network
-kubectl -n lifeboat get triageplans current -o yaml -w   # watch the plan
+make cluster import                                      # 3-server k3d cluster, images on every node
+make deploy monitoring workloads wait                    # secrets, MinIO, controller x2, Prometheus, demo tiers
+make itest                                               # real-cluster check: Lease, TriagePlan, takeover, revert
+make demo                                                # 20x surge + flood replay, from inside the cluster
+kubectl -n lifeboat get triageplans -w                   # watch the plan
+make reset                                               # clean L0 before the next run
 ```
-In the cluster, checkpoints go to S3: `deploy/05-checkpoint-store.yaml` runs MinIO and puts the same `lifeboat-s3` Secret in both namespaces (switch it to real S3 for the AWS run). The `file` backend is only for unit tests and running the worker on your laptop, since pods don't share `/tmp`.
+In the cluster, checkpoints go to S3: MinIO on laptops (`deploy/05-checkpoint-store.yaml`), a real bucket on AWS (`S3_MODE=aws` in `.env`). Secrets come from your local `.env` (`make secrets`), never from git. The `file` backend is only for unit tests and running the worker on your laptop, since pods don't share `/tmp`.
 
 ## Baselines
 - **B0** pod priority only: apply `deploy/01-priorityclasses.yaml` + `04-demo-workloads.yaml`, do not deploy Lifeboat.
@@ -34,8 +37,9 @@ In the cluster, checkpoints go to S3: `deploy/05-checkpoint-store.yaml` runs Min
 
 ## Status / known gaps (be honest in the report)
 - Unit-tested: voter, planner, executor crash/takeover, forecast, checkpoint, feed parsers.
-- **Not yet run on a real cluster**: `lease.py`, `k8s_plan_store.py`, `k8s_actions.py`, `discovery.py`, `controller.py`, manifests. Expect small fixes.
+- Tested against a real k3s API server (`make itest`, also in CI) as the lifeboat ServiceAccount: `lease.py`, `k8s_plan_store.py`, `k8s_actions.py`, `discovery.py`, `controller.py`, RBAC and all manifests. Covers L2 triage, standby takeover with fencing, and revert to original settings.
+- **Not yet run with real pods** (needs images on nodes): checkpoint save/resume through MinIO, Prometheus queries, the replay and Locust Jobs. First `make demo` on k3d will tell.
 - `PUB_URL` / `NEA_URL` and parsers must be checked against the live data.gov.sg responses.
 - Voter calm-period state is per replica (not shared); a freshly promoted standby may lag by one calm period when stepping down.
 - Thresholds N, X, Y, NEA mm cut-offs, `cost_millis_per_rps` need tuning (`lifeboat/config.py`).
-- Change `LIFEBOAT_HMAC_SECRET` in `deploy/03-lifeboat.yaml` before sharing the repo.
+- Everyone deploying to the same cluster needs the same `.env` (shared privately, see docs/CLUSTER.md).

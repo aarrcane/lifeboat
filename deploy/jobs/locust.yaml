@@ -1,0 +1,26 @@
+# In-cluster Locust run of loadtest/locustfile.py (the 20x surge shape), created by `make load`.
+# The locustfile is mounted from the ConfigMap `locustfile` that the Makefile creates.
+# Good enough for demos. For the measured experiments (E1/E2), P5 may prefer running Locust
+# outside the cluster so the load generator does not compete for the same CPUs.
+apiVersion: batch/v1
+kind: Job
+metadata: {name: locust, namespace: lifeboat, labels: {app: lifeboat-load}}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata: {labels: {app: lifeboat-load}}
+    spec:
+      restartPolicy: Never
+      priorityClassName: lifeboat-system
+      containers:
+        - name: locust
+          image: locustio/locust:2.31.8
+          args: [-f, /mnt/locust/locustfile.py, --headless, --host, "http://c1-emergency.lifeboat-demo",
+                 --only-summary]
+          env:
+            - {name: C1_URL, value: "http://c1-emergency.lifeboat-demo"}
+            - {name: C2_URL, value: "http://c2-portal.lifeboat-demo"}
+          volumeMounts: [{name: locustfile, mountPath: /mnt/locust}]
+          resources: {requests: {cpu: 500m, memory: 256Mi}}
+      volumes: [{name: locustfile, configMap: {name: locustfile}}]

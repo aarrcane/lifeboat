@@ -1,0 +1,21 @@
+# Replays a recorded/synthetic flood scenario from INSIDE the cluster, so readings reach
+# both Lifeboat pods through the headless Service. Created by `make replay` (SPEED and
+# SCENARIO are filled in by the Makefile).
+apiVersion: batch/v1
+kind: Job
+metadata: {name: replay, namespace: lifeboat, labels: {app: lifeboat-replay}}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata: {labels: {app: lifeboat-replay}}
+    spec:
+      restartPolicy: Never
+      priorityClassName: lifeboat-system
+      containers:
+        - name: replay
+          image: lifeboat/controller:latest
+          imagePullPolicy: IfNotPresent
+          command: [python, -u, -m, feeds.replay, "__SCENARIO__", --speed, "__SPEED__"]
+          envFrom: [{secretRef: {name: lifeboat-secrets}}]
+          resources: {requests: {cpu: 50m, memory: 64Mi}}

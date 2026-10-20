@@ -1,0 +1,12 @@
+# Catches the mistakes kubectl only reports at deploy time (duplicate keys, broken indentation).
+extends: relaxed
+rules:
+  line-length: disable
+  key-duplicates: enable
+  truthy: disable
+  braces: disable
+  brackets: disable
+  commas: disable
+  colons: disable
+  document-start: disable
+  indentation: disable

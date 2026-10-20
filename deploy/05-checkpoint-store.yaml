@@ -1,33 +1,13 @@
-# Checkpoint store shared by the controller (namespace lifeboat) and the C3/C4 workers
-# (namespace lifeboat-demo). Both need the SAME endpoint, bucket and keys, so the Secret
-# is created in both namespaces. Apply before 03-lifeboat.yaml and 04-demo-workloads.yaml.
+# MinIO: the S3 checkpoint store for laptop / k3d runs. Shared by the controller
+# (namespace lifeboat) and the C3/C4 workers (namespace lifeboat-demo).
 #
-# Laptop / k3s: MinIO below (dev credentials, data lost when the pod restarts). The bucket is
-#               created by whichever of the controller or a worker starts first.
-# AWS run:      delete the MinIO Deployment/Service, set LIFEBOAT_S3_ENDPOINT to "" and put the
-#               IAM user's keys + region in both Secrets.
-apiVersion: v1
-kind: Secret
-metadata: {name: lifeboat-s3, namespace: lifeboat}
-stringData:
-  LIFEBOAT_CHECKPOINT_BACKEND: s3
-  LIFEBOAT_S3_BUCKET: lifeboat-checkpoints
-  LIFEBOAT_S3_ENDPOINT: http://minio.lifeboat.svc.cluster.local:9000
-  AWS_ACCESS_KEY_ID: lifeboat
-  AWS_SECRET_ACCESS_KEY: lifeboat-dev-change-me
-  AWS_DEFAULT_REGION: us-east-1
----
-apiVersion: v1
-kind: Secret
-metadata: {name: lifeboat-s3, namespace: lifeboat-demo}
-stringData:                       # keep identical to the Secret above
-  LIFEBOAT_CHECKPOINT_BACKEND: s3
-  LIFEBOAT_S3_BUCKET: lifeboat-checkpoints
-  LIFEBOAT_S3_ENDPOINT: http://minio.lifeboat.svc.cluster.local:9000
-  AWS_ACCESS_KEY_ID: lifeboat
-  AWS_SECRET_ACCESS_KEY: lifeboat-dev-change-me
-  AWS_DEFAULT_REGION: us-east-1
----
+# The `lifeboat-s3` Secret is NOT in git. `make secrets` (scripts/make-secrets.sh) creates it
+# in both namespaces from your local .env, generating random keys on the first run.
+#
+# Laptop / k3d: S3_MODE=minio (default). This file is applied; data is lost when the pod
+#               restarts, which `make reset` uses to wipe checkpoints between runs.
+# AWS run:      S3_MODE=aws. This file is NOT applied; the Secret points at a real S3 bucket
+#               and the pods get credentials from the EC2 instance profile (LabRole).
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: minio, namespace: lifeboat}

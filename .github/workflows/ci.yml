@@ -9,3 +9,56 @@ jobs:
         with: {python-version: "3.12"}
       - run: pip install -r requirements.txt pytest
       - run: python -m pytest -q
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: yamllint (duplicate keys, bad YAML)
+        run: pip install yamllint && yamllint -c .yamllint deploy .github
+      - name: kubeconform (Kubernetes schema, strict)
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring
+      - name: shellcheck
+        run: shellcheck scripts/*.sh scripts/*/*.sh
+
+  cluster:
+    # Real API server (k3s control plane with embedded etcd, no nodes): applies every manifest
+    # as `make deploy workloads` does, then runs the Lease/TriagePlan/takeover/revert check
+    # as the lifeboat ServiceAccount.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt
+      - name: start k3s control plane
+        run: |
+          curl -sSL -o k3s https://github.com/k3s-io/k3s/releases/download/v1.31.4%2Bk3s1/k3s
+          chmod +x k3s && sudo mv k3s /usr/local/bin/ && sudo ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl
+          sudo nohup k3s server --disable-agent --cluster-init --write-kubeconfig-mode 644 \
+            --disable traefik,servicelb,metrics-server,local-storage,coredns > k3s.log 2>&1 &
+          for i in $(seq 1 60); do kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get --raw=/readyz && break; sleep 2; done
+      - name: make deploy workloads
+        run: make deploy workloads
+        env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
+      - name: make itest
+        run: make itest
+        env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t lifeboat/controller:ci .
+      - run: docker build -t lifeboat/webapp:ci workloads/webapp
+      - run: docker build -t lifeboat/worker:ci -f workloads/worker/Dockerfile .
+      - name: smoke-test the images
+        run: |
+          docker run --rm lifeboat/controller:ci python -c "import lifeboat.controller, lifeboat.operator, feeds.replay; print('controller ok')"
+          docker run --rm lifeboat/worker:ci python -c "import checkpoint, boto3; print('worker ok')"
+          docker run -d --name web -p 8000:8000 lifeboat/webapp:ci
+          for i in $(seq 1 20); do curl -sf localhost:8000/healthz && break; sleep 1; done
+          curl -sf localhost:8000/ && curl -sf localhost:8000/metrics | grep -q http_requests_total
+          docker rm -f web
