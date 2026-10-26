@@ -8,10 +8,12 @@ from .signing import verify
 
 
 class Voter:
-    def __init__(self, secret: str, calm_seconds: float, window_s: float = 600.0):
+    def __init__(self, secret: str, calm_seconds: float, window_s: float = 600.0,
+                 naive: bool = False):
         self.secret = secret
         self.calm_seconds = calm_seconds
         self.window_s = window_s
+        self.naive = naive
         self.level: Level = Level.L0
         self.override: Optional[Level] = None
         self._calm_since: Optional[float] = None
@@ -39,6 +41,8 @@ class Voter:
         agreed = levels[1] if len(levels) >= 2 else 0          # highest level >=2 sources support
         if c1_struggling:
             return Level.L3                                    # measured, no vote
+        if self.naive and levels and levels[0] >= Level.L1:
+            return Level.L2                                    # naive baseline: any 1 source -> L2
         if agreed >= Level.L2:
             return Level.L2                                    # sources only vote up to L2
         if levels and levels[0] >= Level.L1:
@@ -54,7 +58,10 @@ class Voter:
             self.level = target                                # up: immediately
             self._calm_since = None
         elif target < self.level:
-            if self._calm_since is None:
+            if self.naive or self.calm_seconds <= 0:
+                self.level = target                            # naive: no calm-period hysteresis
+                self._calm_since = None
+            elif self._calm_since is None:
                 self._calm_since = now
             elif now - self._calm_since >= self.calm_seconds:
                 self.level = Level(self.level - 1)             # down: one level per calm period
