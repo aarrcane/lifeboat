@@ -8,11 +8,15 @@ functions:
     lang: python3-http
     handler: ./feeds
     image: lifeboat/pub-feed:latest
-    environment: {PUB_URL: "SET_ME", LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"}
+    environment:
+      PUB_URL: "https://api-open.data.gov.sg/v2/real-time/api/pub-flood-alerts"
+      LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"
     annotations: {topic: cron-function, schedule: "*/2 * * * *"}
   nea-feed:
     lang: python3-http
     handler: ./feeds
     image: lifeboat/nea-feed:latest
-    environment: {NEA_URL: "SET_ME", LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"}
+    environment:
+      NEA_URL: "https://api-open.data.gov.sg/v2/real-time/api/rainfall"
+      LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"
     annotations: {topic: cron-function, schedule: "*/5 * * * *"}

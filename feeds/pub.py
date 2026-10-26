@@ -1,13 +1,16 @@
 """S1: PUB flood alerts (data.gov.sg). Serverless handler (OpenFaaS python3-http style).
 
-TODO(owner): confirm the real response shape of the dataset in the proposal (ref [2]) and
-set PUB_URL. The parser below is deliberately tolerant and is covered by a fixture test.
+Dataset ref [2]: https://data.gov.sg/datasets/d_f1404e08587ce555b9ea3f565e2eb9a3/view
+Real-time endpoint: https://api-open.data.gov.sg/v2/real-time/api/pub-flood-alerts
+Any active flood alert item in the response reports L2 evidence (which still requires a
+second source to agree before Lifeboat enters L2 Emergency).
 """
 import os
 
 from . import common
 
-PUB_URL = os.getenv("PUB_URL", "")
+DEFAULT_PUB_URL = "https://api-open.data.gov.sg/v2/real-time/api/pub-flood-alerts"
+PUB_URL = os.getenv("PUB_URL", DEFAULT_PUB_URL)
 TTL_S = float(os.getenv("PUB_TTL_S", "150"))
 
 

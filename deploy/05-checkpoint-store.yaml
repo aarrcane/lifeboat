@@ -20,14 +20,13 @@ spec:
       priorityClassName: lifeboat-system
       containers:
         - name: minio
-          image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-          args: [server, /data, --console-address, ":9001"]
+          image: bitnamilegacy/minio:2025.7.23-debian-12-r5
           env:
             - {name: MINIO_ROOT_USER, valueFrom: {secretKeyRef: {name: lifeboat-s3, key: AWS_ACCESS_KEY_ID}}}
             - {name: MINIO_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: lifeboat-s3, key: AWS_SECRET_ACCESS_KEY}}}
           ports: [{name: api, containerPort: 9000}, {name: console, containerPort: 9001}]
           readinessProbe: {httpGet: {path: /minio/health/ready, port: 9000}, periodSeconds: 5}
-          volumeMounts: [{name: data, mountPath: /data}]
+          volumeMounts: [{name: data, mountPath: /bitnami/minio/data}]
           resources: {requests: {cpu: 100m, memory: 256Mi}}
       volumes: [{name: data, emptyDir: {}}]
 ---

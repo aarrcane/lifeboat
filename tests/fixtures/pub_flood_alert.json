@@ -1,0 +1,24 @@
+{
+  "code": 0,
+  "data": {
+    "timestamp": "2026-10-26T14:30:00+08:00",
+    "flood_alerts": [
+      {
+        "alert_id": "PUB-20261026-01",
+        "location": "Upper Bukit Timah Road (opp Beauty World MRT)",
+        "status": "flash_flood_risk",
+        "water_level_pct": 92,
+        "issued_at": "2026-10-26T14:28:00+08:00"
+      },
+      {
+        "alert_id": "PUB-20261026-02",
+        "location": "Dunearn Road / Sime Road Junction",
+        "status": "flash_flood_risk",
+        "water_level_pct": 95,
+        "issued_at": "2026-10-26T14:29:00+08:00"
+      }
+    ]
+  },
+  "errorMsg": ""
+}
+

@@ -3,8 +3,13 @@ import json
 import os
 import socket
 import time
+import urllib.error
+import urllib.request
 
-import requests
+try:
+    import requests
+except ModuleNotFoundError:  # pragma: no cover - stdlib fallback when running outside venv
+    requests = None
 
 from lifeboat.models import Reading
 from lifeboat.signing import sign
@@ -28,15 +33,30 @@ def targets() -> list[str]:
         return [f"http://{INGEST_HOST}:{INGEST_PORT}"]
 
 
-def send(r: Reading) -> list[int]:
-    codes = []
-    for url in targets():
+def _post_json(url: str, payload: dict, timeout: float = 3.0) -> int:
+    if requests is not None:
         try:
-            codes.append(requests.post(f"{url}/readings", json=r.to_dict(), timeout=3).status_code)
+            return requests.post(url, json=payload, timeout=timeout).status_code
         except requests.RequestException:
-            codes.append(0)
-    return codes
+            return 0
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except OSError:
+        return 0
+
+
+def send(r: Reading) -> list[int]:
+    return [_post_json(f"{url}/readings", r.to_dict(), timeout=3) for url in targets()]
 
 
 def get_json(url: str):
-    return requests.get(url, timeout=10).json()
+    if requests is not None:
+        return requests.get(url, timeout=10).json()
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        return json.loads(resp.read().decode())

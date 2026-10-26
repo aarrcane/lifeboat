@@ -1,0 +1,24 @@
+{
+  "code": 0,
+  "data": {
+    "stations": [
+      {"id": "S77", "deviceId": "S77", "name": "Alexandra Road", "location": {"latitude": 1.2937, "longitude": 103.8125}},
+      {"id": "S109", "deviceId": "S109", "name": "Ang Mo Kio Avenue 5", "location": {"latitude": 1.3764, "longitude": 103.8492}},
+      {"id": "S90", "deviceId": "S90", "name": "Bukit Timah Road", "location": {"latitude": 1.3191, "longitude": 103.8191}}
+    ],
+    "readings": [
+      {
+        "timestamp": "2026-10-26T14:00:00+08:00",
+        "data": [
+          {"stationId": "S77", "value": 0.0},
+          {"stationId": "S109", "value": 0.4},
+          {"stationId": "S90", "value": 0.2}
+        ]
+      }
+    ],
+    "readingType": "TB1 Rainfall 5 Minute Total F",
+    "readingUnit": "mm"
+  },
+  "errorMsg": ""
+}
+
