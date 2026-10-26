@@ -1,0 +1,5 @@
+setup,name,c1_pods_ready,e1_time_to_capacity_s,c1_served_pct,p50_ms,p95_ms
+B0,Plain pod priority,6,58.0,54.4,46.3,232.8
+B1,Autoscaling + spare room,8,40.0,77.8,38.9,172.8
+B2,"Lifeboat, warnings off",12,22.0,94.2,31.5,112.8
+lifeboat,Full Lifeboat,12,0.0,100.0,26.4,51.2
