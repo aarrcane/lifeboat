@@ -37,12 +37,15 @@ jobs:
         run: |
           curl -sSL -o k3s https://github.com/k3s-io/k3s/releases/download/v1.31.4%2Bk3s1/k3s
           chmod +x k3s && sudo mv k3s /usr/local/bin/ && sudo ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl
-          sudo nohup k3s server --disable-agent --cluster-init --write-kubeconfig-mode 644 \
+          sudo nohup k3s server --disable-agent --cluster-init --write-kubeconfig-mode 644 --secrets-encryption \
             --disable traefik,servicelb,metrics-server,local-storage,coredns > k3s.log 2>&1 &
           for i in $(seq 1 60); do kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get --raw=/readyz && break; sleep 2; done
       - name: make deploy workloads
         run: make deploy workloads
         env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
+      - name: Secrets are encrypted at rest
+        run: |
+          sudo k3s secrets-encrypt status | tee /dev/stderr | grep -q 'Encryption Status: Enabled'
       - name: make itest
         run: make itest
         env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}

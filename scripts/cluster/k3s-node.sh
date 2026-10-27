@@ -13,7 +13,7 @@ ROLE="${1:?usage: k3s-node.sh first|join}"
 export INSTALL_K3S_VERSION="${INSTALL_K3S_VERSION:-v1.31.4+k3s1}"
 export K3S_TOKEN
 
-args=(server --disable traefik --write-kubeconfig-mode 644)
+args=(server --disable traefik --write-kubeconfig-mode 644 --secrets-encryption)
 [[ -n "${TLS_SAN:-}" ]] && args+=(--tls-san "$TLS_SAN")
 
 case "$ROLE" in

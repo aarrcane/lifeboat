@@ -126,6 +126,14 @@ Nothing secret is in git. `make deploy` runs `make secrets`, which reads `.env` 
 on the first run, creates it with random keys (`.env.example` shows the fields). Everyone who
 deploys to the **same** cluster needs the **same** `.env`: share it privately, never in the repo.
 
+Inside the cluster, Secrets are encrypted at rest: every k3s server starts with
+`--secrets-encryption` (`make cluster`, `scripts/aws/up.sh`, `scripts/cluster/k3s-node.sh`), so etcd
+and its snapshots hold ciphertext, not base64. Check with
+`docker exec k3d-lifeboat-server-0 k3s secrets-encrypt status` (laptop) or
+`sudo k3s secrets-encrypt status` (EC2). A cluster created before this change is not encrypted:
+recreate it (`make cluster-down cluster`), or follow
+[k3s secrets-encrypt](https://docs.k3s.io/cli/secrets-encrypt) to turn it on in place.
+
 ## When something goes wrong
 
 | You see | Do |

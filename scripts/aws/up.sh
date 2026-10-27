@@ -83,7 +83,7 @@ userdata() {   # $1 = extra k3s args
 #!/bin/bash
 set -eux
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION K3S_TOKEN=$TOKEN sh -s - server \\
-  --disable traefik --write-kubeconfig-mode 644 --tls-san $EIP $1
+  --disable traefik --write-kubeconfig-mode 644 --secrets-encryption --tls-san $EIP $1
 EOF
 }
 

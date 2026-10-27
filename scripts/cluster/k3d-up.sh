@@ -30,6 +30,7 @@ k3d cluster create "$NAME" \
   --servers 3 --agents 0 \
   --api-port 6550 \
   --k3s-arg "--disable=traefik@server:*" \
+  --k3s-arg "--secrets-encryption@server:*" \
   --k3s-arg "--kubelet-arg=system-reserved=cpu=${RESERVED}@server:*" \
   --wait
 
