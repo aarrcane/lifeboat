@@ -44,8 +44,11 @@ jobs:
         run: make deploy workloads
         env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
       - name: Secrets are encrypted at rest
+        # `k3s secrets-encrypt status` needs a node, and this control plane has none,
+        # so check the apiserver was started with the encryption config instead.
         run: |
-          sudo k3s secrets-encrypt status | tee /dev/stderr | grep -q 'Encryption Status: Enabled'
+          sudo test -s /var/lib/rancher/k3s/server/cred/encryption-config.json
+          grep -q -- '--encryption-provider-config' k3s.log
       - name: make itest
         run: make itest
         env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
