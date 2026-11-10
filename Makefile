@@ -63,7 +63,7 @@ monitoring: ## Prometheus + Grafana (kube-prometheus-stack) and the PodMonitors
 	helm repo update prometheus-community
 	helm upgrade --install kps prometheus-community/kube-prometheus-stack -n monitoring --create-namespace \
 	  --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false --wait --timeout 10m
-	kubectl apply -f deploy/monitoring/podmonitors.yaml
+	kubectl apply -f deploy/monitoring/podmonitors.yaml -f deploy/monitoring/grafana-dashboard.yaml
 
 restart: ## restart pods so they pick up newly imported images
 	kubectl -n lifeboat rollout restart deploy/lifeboat
