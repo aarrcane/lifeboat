@@ -1,0 +1,26 @@
+{
+  "config_queries": {
+    "q_cluster_rps": 9.945454545454545,
+    "q_c1_rps": 5.9818181818181815,
+    "q_c1_p95": 0.009499999999999998
+  },
+  "config_queries_ok": true,
+  "dashboard_queries": 12,
+  "dashboard_ok": 11,
+  "dashboard_cluster_only": 1,
+  "dashboard_no_data": [],
+  "first_L2_scenario_s": 602,
+  "first_S3_vote_scenario_s": 582,
+  "traffic_90pct_peak_scenario_s": 863,
+  "max_level": 2,
+  "final_level": 1,
+  "max_plan_steps": 4,
+  "prometheus_down": {
+    "cluster_rps_when_down": 0.0,
+    "query_when_down": null,
+    "c1_struggling_when_down": false,
+    "loop_ticks_while_down": 3
+  },
+  "speed": 4.0,
+  "samples": 79
+}

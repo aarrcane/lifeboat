@@ -1,0 +1,13 @@
+panel,query,status,error,series,verdict
+Alert level,max(lifeboat_level),success,,1,ok
+Active executor,max(lifeboat_is_active_executor) by (pod),success,,1,ok
+Takeover number,max(lifeboat_takeover_number),success,,1,ok
+C1 struggling (L3 trigger),max(lifeboat_c1_struggling),success,,1,ok
+Alert level over time,max(lifeboat_level),success,,1,ok
+Alert level over time,max(lifeboat_source_level) by (source),success,,3,ok
+Forecast traffic / normal (S3),max(lifeboat_forecast_ratio),success,,1,ok
+Requests per second by tier,sum(rate(http_requests_total[1m])) by (tier),success,,2,ok
+C1 p95 response time (target 0.5 s),"histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tier=""C1""}[1m])) by (le))",success,,1,ok
+Triage plan steps,max(lifeboat_plan_steps) by (state),success,,2,ok
+Rejected readings (forged / expired),sum(increase(lifeboat_rejected_readings_total[5m])) by (reason),success,,1,ok
+Free CPU in cluster (millicores),"1000 * (sum(kube_node_status_allocatable{resource=""cpu""}) - sum(kube_pod_container_resource_requests{resource=""cpu""}))",success,,0,cluster-only (kube-state-metrics)
