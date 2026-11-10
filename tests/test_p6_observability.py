@@ -155,3 +155,71 @@ def test_dashboard_covers_work_split_panels_and_known_metrics():
         base = name.removesuffix("_total")
         assert base in exported, f"dashboard uses unknown metric {name}"
     assert len({p["id"] for p in d["panels"]}) == len(d["panels"])
+
+
+def test_alert_rules_are_picked_up_and_use_known_metrics():
+    from prometheus_client.metrics import MetricWrapperBase
+    from lifeboat import metrics as m
+    exported = {mm.describe()[0].name for mm in vars(m).values() if isinstance(mm, MetricWrapperBase)}
+    doc = yaml.safe_load((ROOT / "deploy/monitoring/alert-rules.yaml").read_text())
+    assert doc["kind"] == "PrometheusRule" and doc["metadata"]["labels"]["release"] == "kps"
+    rules = doc["spec"]["groups"][0]["rules"]
+    names = {r["alert"] for r in rules}
+    assert {"LifeboatLevelChanged", "LifeboatEmergency", "LifeboatNoActiveExecutor"} <= names
+    for r in rules:
+        for metric in re.findall(r"lifeboat_[a-z0-9_]+", r["expr"]):
+            assert metric.removesuffix("_total") in exported, (r["alert"], metric)
+    dash = _dashboard()
+    assert any("ALERTS" in a["expr"] for a in dash["annotations"]["list"])   # alerts drawn on the dashboard
+
+
+# ---------------------------------------------------------------- results pipeline
+def test_e4_export_matches_p2_demo():
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import export_e4
+    rows = export_e4.rows()
+    lb = [r for r in rows if r["voter"] == "lifeboat"]
+    assert sum(r["false_l2_alarms"] for r in lb) == 0 and sum(r["missed"] for r in lb) == 0
+    assert sum(r["false_l2_alarms"] for r in rows if r["voter"] == "naive") > 0
+
+
+def test_e5_kubectl_top_parsing():
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from e5_crash_test import parse_top
+    assert parse_top("lifeboat-a 12m 45Mi\nlifeboat-b 8m 40960Ki") == (10.0, 42.5)
+    assert parse_top("") == (0.0, 0.0)
+
+
+def test_every_plotter_runs_on_sample_csvs(tmp_path, monkeypatch):
+    import pytest
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import plot_results as pr
+    (tmp_path / "figures").mkdir()
+    (tmp_path / "e1_e2_summary.csv").write_text((ROOT / "results/e1_e2_summary.csv").read_text())
+    (tmp_path / "e3_work_saved.csv").write_text(
+        "setup,run,workload,progress_lost_s,restore_s\nB0,1,c3-analytics,120,90\nlifeboat,1,c3-analytics,10,60\n")
+    import export_e4
+    with open(tmp_path / "e4_alerts.csv", "w") as fh:
+        fh.write(",".join(export_e4.FIELDS) + "\n")
+        for r in export_e4.rows():
+            fh.write(",".join(str(r[f]) for f in export_e4.FIELDS) + "\n")
+    (tmp_path / "e5_crash.csv").write_text(
+        "test,run,takeover_s,steps_total,steps_left_half_done,steps_mismatched,takeover_increment,"
+        "lifeboat_cpu_m,lifeboat_mem_mi\nkill-active,1,17.5,4,0,0,1,12,45\n")
+    monkeypatch.setattr(pr, "RES", tmp_path)
+    monkeypatch.setattr(pr, "FIG", tmp_path / "figures")
+    for _exp, (_csv, _owner, fn) in pr.EXPERIMENTS.items():
+        for name in fn(plt):
+            assert (tmp_path / "figures" / name).stat().st_size > 1000
+
+
+def test_rejection_counters_exist_before_the_first_forgery():
+    # increase() needs a sample before the first increment, or the first forged reading never alerts.
+    from prometheus_client import generate_latest
+    import lifeboat.metrics  # noqa: F401
+    text = generate_latest().decode()
+    for reason in ("malformed", "bad_signature", "expired"):
+        assert f'lifeboat_rejected_readings_total{{reason="{reason}"}}' in text

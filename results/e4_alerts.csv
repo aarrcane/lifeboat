@@ -1,0 +1,9 @@
+scenario,true_crisis,voter,peak_level,false_l2_alarms,false_l2_s,missed,flips
+Flash flood,1,naive,2,0,0,0,2
+Flash flood,1,lifeboat,2,0,0,0,3
+Noisy sensor,0,naive,2,3,360,0,6
+Noisy sensor,0,lifeboat,1,0,0,0,2
+Conflicting feeds,0,naive,2,2,420,0,4
+Conflicting feeds,0,lifeboat,1,0,0,0,4
+No crisis,0,naive,2,1,300,0,2
+No crisis,0,lifeboat,1,0,0,0,2
