@@ -49,7 +49,7 @@ class Config:
     # --- forecasting (Holt linear trend)
     forecast_sample_s: float = 15.0
     forecast_horizon_steps: int = 12     # 12 * 15 s = 3 minutes ahead
-    holt_alpha: float = 0.5
+    holt_alpha: float = 0.3              # tuned by scripts/demo_p6.py sweep: 0.5 gave false L2 votes on no-crisis traffic
     holt_beta: float = 0.3
     forecast_warmup_samples: int = 8     # 8 * 15 s = 2 min to learn normal traffic
 

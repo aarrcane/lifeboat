@@ -35,6 +35,15 @@ class Monitor:
     def c1_rps(self) -> float:
         return self.query(self.cfg.q_c1_rps) or 0.0
 
+    # For the forecaster: "no data" must stay None. Feeding 0.0 during a Prometheus outage
+    # (or before the first scrape) teaches the baseline that normal traffic is ~0, so normal
+    # traffic afterwards looks like a 10x surge and S3 votes L2 (found by p6_live_check.py).
+    def cluster_rps_sample(self) -> Optional[float]:
+        return self.query(self.cfg.q_cluster_rps)
+
+    def c1_rps_sample(self) -> Optional[float]:
+        return self.query(self.cfg.q_c1_rps)
+
     def c1_struggling(self) -> bool:
         p95 = self.query(self.cfg.q_c1_p95)
         slow = p95 is not None and p95 > self.cfg.c1_latency_target_s

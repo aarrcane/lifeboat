@@ -75,8 +75,11 @@ class Lifeboat:
 
         if now - self._last_sample >= cfg.forecast_sample_s:          # S3: forecast source
             self._last_sample = now
-            self.traffic.observe(self.monitor.cluster_rps())
-            self.c1_holt.update(self.monitor.c1_rps())
+            rps, c1 = self.monitor.cluster_rps_sample(), self.monitor.c1_rps_sample()
+            if rps is not None:                                        # no data => skip, don't learn 0
+                self.traffic.observe(rps)
+            if c1 is not None:
+                self.c1_holt.update(c1)
             self.book.add(sign(Reading("S3", int(self.traffic.level()), now,
                                        now + cfg.forecast_ttl_s), cfg.hmac_secret))
             metrics.FORECAST_RATIO.set(self.traffic.ratio())
