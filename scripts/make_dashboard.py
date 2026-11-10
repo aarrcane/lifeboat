@@ -87,7 +87,10 @@ def dashboard() -> dict:
         "annotations": {"list": [{
             "name": "Level changes", "enable": True, "datasource": DS, "iconColor": "red",
             "expr": "changes(max(lifeboat_level)[30s:5s]) > 0", "step": "5s",
-            "titleFormat": "Alert level changed"}]},
+            "titleFormat": "Alert level changed"},
+            {"name": "Lifeboat alerts", "enable": True, "datasource": DS, "iconColor": "orange",
+             "expr": 'ALERTS{alertname=~"Lifeboat.*", alertstate="firing", alertname!="LifeboatLevelChanged"}',
+             "step": "5s", "titleFormat": "{{alertname}}", "textFormat": "{{severity}}"}]},
         "panels": panels,
     }
 

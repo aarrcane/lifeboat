@@ -8,7 +8,8 @@ What runs for real
   * S1/S2 come from data/scenario_flash_flood.jsonl, replayed SPEED times faster, signed
 What it checks
   1. every PromQL query in lifeboat/config.py returns a value from real scraped data
-  2. every Grafana panel query (scripts/make_dashboard.py) parses and returns series
+  2. every Grafana panel query (scripts/make_dashboard.py) parses and returns series,
+     and the alert rules (deploy/monitoring/alert-rules.yaml) load and fire when they should
   3. the forecast votes during the surge and the voter reaches L2 before peak traffic
   4. with Prometheus killed, Monitor returns None and the loop keeps ticking (no crash)
 Outputs go to results/p6_live/: timeseries.csv, dashboard_queries.csv, summary.json, live_run.png
@@ -67,7 +68,11 @@ m.app.run(host="127.0.0.1", port=int(sys.argv[2]), threaded=True)
 
 
 def prom_config(path: Path) -> None:
+    import yaml
+    rules = yaml.safe_load((ROOT / "deploy" / "monitoring" / "alert-rules.yaml").read_text())
+    (path.parent / "rules.yml").write_text(yaml.safe_dump({"groups": rules["spec"]["groups"]}))
     path.write_text(f"""global: {{scrape_interval: 5s, evaluation_interval: 5s}}
+rule_files: [rules.yml]
 scrape_configs:
   - job_name: webapp
     static_configs: [{{targets: ['127.0.0.1:{C1_PORT}', '127.0.0.1:{C2_PORT}']}}]
@@ -269,6 +274,7 @@ def main() -> int:
             procs.append(subprocess.Popen([sys.executable, "-c", WEBAPP_RUNNER,
                                            str(ROOT / "workloads" / "webapp" / "app.py"), str(port)], env=env))
         start_http_server(LB_PORT, addr="127.0.0.1")
+        metrics.IS_ACTIVE.set(1)        # this harness's single replica holds the (fake) Lease from the start
         for url in (f"http://127.0.0.1:{PROM_PORT}/-/ready", f"http://127.0.0.1:{C1_PORT}/healthz",
                     f"http://127.0.0.1:{C2_PORT}/healthz"):
             wait_http(url)
@@ -319,6 +325,12 @@ def main() -> int:
                   for tier in ("C1", "C2")}
         series["c1_p95"] = query_range(cfg.q_c1_p95, t0, t_end)
         series["level"] = query_range("max(lifeboat_level)", t0, t_end)
+        fired = {}                                  # alert rules from deploy/monitoring/alert-rules.yaml
+        r = requests.get(f"http://127.0.0.1:{PROM_PORT}/api/v1/query_range",
+                         params={"query": 'max by (alertname) (ALERTS{alertstate="firing"})',
+                                 "start": t0, "end": t_end, "step": "5s"}, timeout=10).json()
+        for res in r["data"]["result"]:
+            fired[res["metric"]["alertname"]] = round((float(res["values"][0][0]) - t0) * args.speed)
 
         # 4: Prometheus down -> Monitor returns None, loop survives
         procs[0].terminate()
@@ -350,6 +362,7 @@ def main() -> int:
             "final_level": rows[-1]["level"],
             "max_plan_steps": max(r["plan_steps"] for r in rows),
             "prometheus_down": down,
+            "alerts_fired_first_scenario_s": dict(sorted(fired.items(), key=lambda kv: kv[1])),
             "speed": args.speed, "samples": len(rows),
         }
         (out / "summary.json").write_text(json.dumps(summary, indent=2))

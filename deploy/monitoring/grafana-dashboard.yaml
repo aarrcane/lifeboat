@@ -34,6 +34,19 @@ data:
             "expr": "changes(max(lifeboat_level)[30s:5s]) > 0",
             "step": "5s",
             "titleFormat": "Alert level changed"
+          },
+          {
+            "name": "Lifeboat alerts",
+            "enable": true,
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "iconColor": "orange",
+            "expr": "ALERTS{alertname=~\"Lifeboat.*\", alertstate=\"firing\", alertname!=\"LifeboatLevelChanged\"}",
+            "step": "5s",
+            "titleFormat": "{{alertname}}",
+            "textFormat": "{{severity}}"
           }
         ]
       },

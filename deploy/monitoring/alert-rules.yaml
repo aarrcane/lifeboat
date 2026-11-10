@@ -1,0 +1,53 @@
+# Lifeboat alert rules (P6). kube-prometheus-stack picks up PrometheusRules labelled release: kps.
+# Firing alerts also appear as annotations on the Grafana dashboard (for the demo video).
+# Checked with promtool and on a real Prometheus by scripts/p6_live_check.py.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: lifeboat-alerts
+  namespace: monitoring
+  labels: {release: kps}
+spec:
+  groups:
+    - name: lifeboat
+      interval: 5s
+      rules:
+        - alert: LifeboatLevelChanged
+          expr: changes(max(lifeboat_level)[1m:5s]) > 0
+          labels: {severity: info}
+          annotations:
+            summary: "Alert level is now L{{ with query \"max(lifeboat_level)\" }}{{ . | first | value }}{{ end }}"
+        - alert: LifeboatEmergency
+          expr: max(lifeboat_level) >= 2
+          labels: {severity: warning}
+          annotations:
+            summary: "Lifeboat is at L2 or higher: C3/C4 paused, C1 scaled up"
+        - alert: LifeboatCritical
+          expr: max(lifeboat_level) >= 3
+          labels: {severity: critical}
+          annotations:
+            summary: "Lifeboat is at L3: C1 is struggling (or a human override)"
+        - alert: LifeboatC1Slow
+          expr: >-
+            histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tier="C1"}[1m])) by (le)) > 0.5
+          for: 30s
+          labels: {severity: warning}
+          annotations:
+            summary: "C1 p95 response time is above the 0.5 s target"
+        - alert: LifeboatNoActiveExecutor
+          expr: (sum(lifeboat_is_active_executor) or vector(0)) == 0
+          for: 30s
+          labels: {severity: critical}
+          annotations:
+            summary: "No Lifeboat replica holds the Lease: triage is not being carried out"
+        - alert: LifeboatTwoActiveExecutors
+          expr: sum(lifeboat_is_active_executor) > 1
+          for: 15s
+          labels: {severity: critical}
+          annotations:
+            summary: "Two replicas think they are active: fencing should stop the older one"
+        - alert: LifeboatForgedReadings
+          expr: sum(increase(lifeboat_rejected_readings_total{reason="bad_signature"}[5m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "A reading with a bad signature was rejected at ingest"
