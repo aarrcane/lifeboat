@@ -2,3 +2,4 @@
 pytest>=8.0
 locust>=2.29
 flask>=3.0
+matplotlib>=3.8   # scripts/demo_p6.py --plots, scripts/plot_results.py
