@@ -7,7 +7,7 @@ S3_MODE  ?= $(shell grep -s '^S3_MODE=' .env | cut -d= -f2)
 PLATFORM ?= linux/amd64
 export CLUSTER
 
-.PHONY: help test itest images cluster cluster-down import k3s-import secrets deploy workloads wait \
+.PHONY: help test itest images cluster cluster-down import k3s-import secrets deploy feeds workloads wait \
         monitoring restart replay load demo reset status undeploy scenario lint
 
 help:   ## list targets
@@ -21,13 +21,14 @@ itest:  ## cluster check: Lease, TriagePlan, takeover, revert, RBAC (needs `make
 
 lint:   ## same manifest/script checks as CI (needs yamllint, kubeconform, shellcheck)
 	yamllint -c .yamllint deploy .github
-	kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring
+	kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds
 	shellcheck scripts/*.sh scripts/*/*.sh
 
-images: ## build the three images
+images: ## build the controller, webapp, worker and OpenFaaS feed images
 	docker build --platform $(PLATFORM) -t lifeboat/controller:latest .
 	docker build --platform $(PLATFORM) -t lifeboat/webapp:latest workloads/webapp
 	docker build --platform $(PLATFORM) -t lifeboat/worker:latest -f workloads/worker/Dockerfile .
+	docker build --platform $(PLATFORM) -t lifeboat/pub-feed:latest -t lifeboat/nea-feed:latest -f feeds/Dockerfile .
 
 cluster: ## laptop: create a 3-server k3d cluster (embedded etcd), 2 CPUs per node
 	bash scripts/cluster/k3d-up.sh $(CLUSTER)
@@ -48,6 +49,9 @@ deploy: ## namespaces, CRD, RBAC, secrets, checkpoint store, Lifeboat controller
 	bash scripts/make-secrets.sh
 	@if [ "$(S3_MODE)" != "aws" ]; then kubectl apply -f deploy/05-checkpoint-store.yaml; fi
 	kubectl apply -f deploy/03-lifeboat.yaml
+
+feeds:  ## install OpenFaaS + cron-connector and deploy pub-feed (2m) and nea-feed (5m)
+	bash scripts/deploy-feeds.sh
 
 workloads: ## tiered demo workloads (C1-C4 + placeholders)
 	kubectl apply -f deploy/04-demo-workloads.yaml

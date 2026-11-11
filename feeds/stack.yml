@@ -1,4 +1,5 @@
-# OpenFaaS (faas-netes on k3s). Build: faas-cli build -f feeds/stack.yml
+# OpenFaaS (faas-netes on k3s). Deploy with `make feeds` (scripts/deploy-feeds.sh)
+# or `faas-cli up -f feeds/stack.yml`.
 version: 1.0
 provider:
   name: openfaas
@@ -9,14 +10,20 @@ functions:
     handler: ./feeds
     image: lifeboat/pub-feed:latest
     environment:
-      PUB_URL: "https://api-open.data.gov.sg/v2/real-time/api/pub-flood-alerts"
+      FEED_SOURCE: "S1"
+      PUB_URL: "https://api-open.data.gov.sg/v2/real-time/api/weather/flood-alerts"
       LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"
+    secrets:
+      - lifeboat-secrets
     annotations: {topic: cron-function, schedule: "*/2 * * * *"}
   nea-feed:
     lang: python3-http
     handler: ./feeds
     image: lifeboat/nea-feed:latest
     environment:
+      FEED_SOURCE: "S2"
       NEA_URL: "https://api-open.data.gov.sg/v2/real-time/api/rainfall"
       LIFEBOAT_INGEST_HOST: "lifeboat-ingest.lifeboat.svc.cluster.local"
+    secrets:
+      - lifeboat-secrets
     annotations: {topic: cron-function, schedule: "*/5 * * * *"}

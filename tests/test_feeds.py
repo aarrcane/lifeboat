@@ -1,10 +1,13 @@
 import json
+import os
 from pathlib import Path
+import threading
+import urllib.request
 from unittest.mock import patch
 
-from feeds import common, nea, pub
+from feeds import common, handler, nea, pub
 from feeds.nea import level_from_payload as nea_level, max_rain
-from feeds.pub import level_from_payload as pub_level
+from feeds.pub import count_alerts, level_from_payload as pub_level
 from lifeboat.signing import verify
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -22,6 +25,19 @@ def test_nea_levels():
 def test_pub_levels():
     assert pub_level({"items": []}) == 0
     assert pub_level({"data": {"flood_alerts": [{"x": 1}]}}) == 2
+    assert pub_level({"data": {"records": []}}) == 0
+    # Cancelled CAP message should report 0 active alerts
+    cancelled = {
+        "code": 0,
+        "data": {
+            "records": [{
+                "datetime": "2026-10-26T15:00:00+08:00",
+                "item": {"type": "observation", "msgType": "Cancel", "readings": [{"area": "Bukit Timah"}]},
+            }]
+        },
+    }
+    assert count_alerts(cancelled) == 0
+    assert pub_level(cancelled) == 0
 
 
 def test_nea_real_fixtures_and_v1_shape():
@@ -36,6 +52,7 @@ def test_nea_real_fixtures_and_v1_shape():
 
 def test_pub_real_fixtures():
     assert pub_level(_load("pub_clear.json")) == 0
+    assert count_alerts(_load("pub_flood_alert.json")) == 2
     assert pub_level(_load("pub_flood_alert.json")) == 2
 
 
@@ -53,3 +70,29 @@ def test_handlers_sign_and_send():
         assert res == {"source": "S2", "level": 1, "sent": [202, 202]}
         sent_reading = mock_send.call_args[0][0]
         assert verify(sent_reading, common.SECRET)
+
+
+def test_openfaas_secret_file_and_handler_server(tmp_path):
+    secret_file = tmp_path / "LIFEBOAT_HMAC_SECRET"
+    secret_file.write_text("openfaas-mounted-key\n", encoding="utf-8")
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("LIFEBOAT_HMAC_SECRET", None)
+        assert common.load_secret((secret_file,)) == "openfaas-mounted-key"
+
+    with patch.object(common, "get_json", return_value=_load("nea_heavy_storm.json")), \
+         patch.object(common, "send", return_value=[202, 202]), \
+         patch.dict(os.environ, {"FEED_SOURCE": "S2"}):
+        assert handler.handle() == {"source": "S2", "level": 2, "sent": [202, 202]}
+        assert handler.handle_http("GET", "/_/health") == (200, {"ok": True, "source": "S2"})
+        assert handler.handle_http("POST", "/", b'{"source": "S2"}') == (
+            200,
+            {"source": "S2", "level": 2, "sent": [202, 202]},
+        )
+
+    with patch.object(common, "get_json", return_value=_load("pub_flood_alert.json")), \
+         patch.object(common, "send", return_value=[202, 202]), \
+         patch.dict(os.environ, {"FEED_SOURCE": "S1"}):
+        assert handler.handle_http("POST", "/") == (
+            200,
+            {"source": "S1", "level": 2, "sent": [202, 202]},
+        )

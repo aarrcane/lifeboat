@@ -1,12 +1,15 @@
 """Local P2 demo (no cluster needed):
   1. Real data.gov.sg PUB/NEA payload parsing -> HMAC signing -> Ingest & Voter gatekeeper
   2. Experiment E4: Alert accuracy across 4 replay scenarios (Lifeboat 2-of-3 Voter vs Naive Voter)
+  3. Optional live check (`--live`): queries live api-open.data.gov.sg PUB and NEA v2 endpoints
 
 Run:
   python scripts/demo_p2.py
+  python scripts/demo_p2.py --live
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -15,10 +18,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from feeds import nea, pub
+from feeds import common, nea, pub
 from lifeboat import ingest
 from lifeboat.models import Level, Reading
-from lifeboat.signing import sign
+from lifeboat.signing import sign, verify
 from lifeboat.voter import Voter
 
 SECRET = "demo-hmac-secret"
@@ -135,7 +138,41 @@ def demo_e4_scenarios() -> None:
     print("conflicting feeds, while a naive 1-source voter triggers 6 false L2 alarms across them.")
 
 
+def demo_live_endpoints() -> None:
+    print()
+    print("3. Live data.gov.sg v2 endpoint check (PUB S1 & NEA S2)")
+    print("-" * 74)
+    pub_raw = common.get_json(pub.PUB_URL)
+    nea_raw = common.get_json(nea.NEA_URL)
+
+    pub_records = (pub_raw.get("data") or {}).get("records") or []
+    pub_ts = pub_records[0].get("datetime") if pub_records else "n/a"
+    pub_alerts = pub.count_alerts(pub_raw)
+    pub_lvl = pub.level_from_payload(pub_raw)
+    r_s1 = common.make_reading("S1", pub_lvl, pub.TTL_S)
+
+    nea_data = nea_raw.get("data") or {}
+    nea_stations = len(nea_data.get("stations") or [])
+    nea_readings = nea_data.get("readings") or []
+    nea_ts = nea_readings[0].get("timestamp") if nea_readings else "n/a"
+    nea_max = nea.max_rain(nea_raw)
+    nea_lvl = nea.level_from_payload(nea_raw)
+    r_s2 = common.make_reading("S2", nea_lvl, nea.TTL_S)
+
+    print(f"  S1 PUB URL : {pub.PUB_URL}")
+    print(f"     Status  : code={pub_raw.get('code')} | records={len(pub_records)} | latest={pub_ts}")
+    print(f"     Parsed  : active_alerts={pub_alerts} -> S1 level L{pub_lvl} (HMAC verified={verify(r_s1, common.SECRET)})")
+    print(f"  S2 NEA URL : {nea.NEA_URL}")
+    print(f"     Status  : code={nea_raw.get('code')} | stations={nea_stations} | latest={nea_ts}")
+    print(f"     Parsed  : max_5m_rain={nea_max:.1f} mm -> S2 level L{nea_lvl} (HMAC verified={verify(r_s2, common.SECRET)})")
+
+
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--live", action="store_true", help="query live api-open.data.gov.sg endpoints")
+    args = ap.parse_args()
     demo_ingest_and_security()
     demo_e4_scenarios()
+    if args.live:
+        demo_live_endpoints()
 

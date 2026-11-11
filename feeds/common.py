@@ -1,7 +1,9 @@
 """Shared by the PUB / NEA serverless functions and the replayer."""
 import json
 import os
+from pathlib import Path
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -14,7 +16,30 @@ except ModuleNotFoundError:  # pragma: no cover - stdlib fallback when running o
 from lifeboat.models import Reading
 from lifeboat.signing import sign
 
-SECRET = os.getenv("LIFEBOAT_HMAC_SECRET", "dev-secret-change-me")
+DEFAULT_SECRET = "dev-secret-change-me"
+SECRET_PATHS = (
+    Path("/var/openfaas/secrets/LIFEBOAT_HMAC_SECRET"),
+    Path("/var/openfaas/secrets/lifeboat-secrets"),
+)
+
+
+def load_secret(secret_paths=SECRET_PATHS) -> str:
+    """Read HMAC secret from env or OpenFaaS mounted secret files (/var/openfaas/secrets/)."""
+    env_val = os.getenv("LIFEBOAT_HMAC_SECRET")
+    if env_val:
+        return env_val.strip()
+    for p in secret_paths:
+        try:
+            if p.is_file():
+                val = p.read_text(encoding="utf-8").strip()
+                if val:
+                    return val
+        except OSError:
+            continue
+    return DEFAULT_SECRET
+
+
+SECRET = load_secret()
 INGEST_HOST = os.getenv("LIFEBOAT_INGEST_HOST", "lifeboat-ingest.lifeboat.svc.cluster.local")
 INGEST_PORT = int(os.getenv("LIFEBOAT_INGEST_PORT", "8081"))
 
@@ -56,7 +81,18 @@ def send(r: Reading) -> list[int]:
 
 
 def get_json(url: str):
+    hdrs = {"User-Agent": "lifeboat-feed/1.0", "Accept": "application/json"}
     if requests is not None:
-        return requests.get(url, timeout=10).json()
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        return json.loads(resp.read().decode())
+        resp = requests.get(url, headers=hdrs, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    req = urllib.request.Request(url, headers=hdrs)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.URLError as e:
+        if isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+            ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                return json.loads(resp.read().decode())
+        raise

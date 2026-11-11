@@ -69,23 +69,65 @@ straight to L3.
 ### 4.1 Warning sources and signed readings (P2)
 
 Each source sends `{source, level, ts, expires_at, sig}`, signed with HMAC-SHA256
-(`lifeboat/signing.py`). Ingest (`lifeboat/ingest.py`) rejects malformed, badly signed or expired
-readings before the voter sees them, and counts each rejection by reason
-(`lifeboat_rejected_readings_total`).
+(`lifeboat/signing.py`). Ingest (`lifeboat/ingest.py`) rejects malformed (`400`), badly signed
+(`401`) or expired (`422`) readings before the voter sees them, and counts each rejection by
+reason (`lifeboat_rejected_readings_total{reason}`).
 
 | Source | Data | TTL | Runs as |
 | --- | --- | --- | --- |
-| S1 PUB flood alerts | data.gov.sg real-time API [2] | 150 s | serverless function |
-| S2 NEA rainfall | data.gov.sg real-time API [3] | 330 s | serverless function |
+| S1 PUB flood alerts | data.gov.sg real-time API [2] | 150 s | OpenFaaS function (`*/2 * * * *`) |
+| S2 NEA rainfall | data.gov.sg real-time API [3] | 330 s | OpenFaaS function (`*/5 * * * *`) |
 | S3 traffic forecast | cluster-wide request rate (Section 4.3) | 60 s | inside the controller |
 
-TODO (P2): OpenFaaS deployment details, real endpoint checks, NEA mm cut-offs.
+**OpenFaaS deployment and dual-replica fan-out.** `make feeds` (`scripts/deploy-feeds.sh`)
+installs OpenFaaS (`faas-netes` with the `Function` CRD enabled and `cron-connector`) on k3s via
+Helm, syncs `lifeboat-secrets` (`LIFEBOAT_HMAC_SECRET`) into the `openfaas-fn` namespace, and
+applies `deploy/feeds/openfaas-functions.yaml` (matching `feeds/stack.yml`). Both functions run
+`feeds/handler.py` (`feeds/Dockerfile`), which reads the shared HMAC secret from
+`/var/openfaas/secrets/LIFEBOAT_HMAC_SECRET` (or `LIFEBOAT_HMAC_SECRET` in the environment) and
+serves `/_/health` and `POST /` on port 8080 for `cron-connector` (`pub-feed` every 2 min,
+`nea-feed` every 5 min). When sending a reading, `feeds/common.py:targets()` resolves the
+headless Service `lifeboat-ingest.lifeboat.svc.cluster.local:8081` (`deploy/03-lifeboat.yaml`)
+to all pod IPs and `POST`s every reading to **both** Lifeboat replicas so the standby voter stays
+warm if the active leader crashes.
+
+**Live endpoint checks (`python scripts/demo_p2.py --live`).** Both feeds were verified against
+the live `api-open.data.gov.sg` v2 endpoints (with a custom `User-Agent: lifeboat-feed/1.0`
+header, as the default `Python-urllib` header is blocked with HTTP 403 by Cloudflare) and saved
+under `tests/fixtures/`:
+- **S1 PUB flood alerts (`feeds/pub.py`):** Dataset `d_f1404e08587ce555b9ea3f565e2eb9a3` [2] is
+  served at `/v2/real-time/api/weather/flood-alerts` (the older `/pub-flood-alerts` slug returns
+  HTTP 404). A live check returns `code: 0` with 25 two-minute Common Alerting Protocol (CAP)
+  observation snapshots in `data.records`, where `records[0].item.readings` lists active flood
+  alert areas (`[]` during normal weather, or area objects under `msgType: "Alert"`). `count_alerts`
+  inspects the latest record (ignoring `msgType: "Cancel"`) and votes **L2** when `readings` is
+  non-empty, or **L0** otherwise.
+- **S2 NEA rainfall (`feeds/nea.py`):** `/v2/real-time/api/rainfall` [3] returns `code: 0` with
+  5-minute rain gauge totals (`TB1 Rainfall 5 Minute Total F`, in mm) across 87 active stations
+  in `data.readings[0].data[].value` (and `max_rain` also supports the legacy v1
+  `items[].readings[]` shape).
+
+**NEA 5-minute rainfall cut-offs.** Because the NEA endpoint reports 5-minute bucket totals
+rather than hourly rates ($\text{mm/5 min} = \text{mm/hr} \div 12$), `feeds/nea.py` maps the
+island-wide maximum 5-minute reading to a severity vote using two meteorological cut-offs:
+- **`NEA_L1_MM = 2.5` mm / 5 min (30 mm/hr equivalent → L1 Watch):** a moderate-to-heavy tropical
+  downpour. For example, during a live afternoon shower check (`2026-11-11T15:40+08:00`), peak
+  5-minute rainfall reached 5.2 mm (62.4 mm/hr) while PUB reported 0 flood alerts: S2 voted
+  **L1** and S1 voted **L0**, so Lifeboat entered **L1 Watch** (adding one spare C1 pod and
+  pausing non-overdue C4 backups) without falsely triggering L2.
+- **`NEA_L2_MM = 7.5` mm / 5 min (90 mm/hr equivalent → L2 Emergency evidence):** exceeds NEA's
+  Heavy Rain Warning threshold of 70 mm/hr (~5.8 mm/5 min) associated with flash flood risk,
+  requiring intense storm rainfall (such as the 11.4 mm / 5 min Bukit Timah reading in
+  `tests/fixtures/nea_heavy_storm.json`) before S2 votes for L2.
 
 ### 4.2 Voter: severity levels (P2)
 
 `lifeboat/voter.py` implements Algorithm 1: one valid source raises **L1 Watch**; two sources
 agreeing within a 600 s window raise **L2 Emergency**; measured C1 distress raises **L3
-Critical** with no vote; a human override locks the level. Going up is immediate; going down
+Critical** with no vote; a human override (`POST /override` with `X-Lifeboat-Token:
+<LIFEBOAT_HMAC_SECRET>`, audit-logged with the operator identity `who` in `lifeboat/ingest.py`)
+locks the level or clears the lock when `level` is `null`. Only the latest valid reading per
+source is counted so a single noisy sensor cannot vote twice. Going up is immediate; going down
 is one level per calm period (N = 5 min), so the level cannot flip-flop.
 
 ### 4.3 Forecast (S3) and monitoring (P6)
@@ -275,7 +317,7 @@ and the most important lesson.
 
 | Role | Member | Main work |
 | --- | --- | --- |
-| P2 Signals, voter & feeds | TODO | signing, ingest, 2-of-3 voter, PUB/NEA feeds, E4 scenarios |
+| P2 Signals, voter & feeds | Lucas Leow (2502908) | signing, ingest, 2-of-3 voter, PUB/NEA OpenFaaS feeds, E4 scenarios |
 | P3 Planner, executor & HA | TODO | planner, checkpointing, executor, Lease/TriagePlan fencing, E3/E5 |
 | P4 Cluster, deploy & AWS | TODO | k3s HA, manifests, CI, MinIO/S3, AWS EC2 |
 | P5 Web load & baselines | TODO | C1/C2 web app, Locust surge, B0–B2, E1/E2 |

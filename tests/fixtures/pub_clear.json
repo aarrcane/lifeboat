@@ -1,8 +1,17 @@
 {
   "code": 0,
   "data": {
-    "timestamp": "2026-10-26T14:00:00+08:00",
-    "flood_alerts": []
+    "records": [
+      {
+        "datetime": "2026-10-26T14:00:22+08:00",
+        "item": {
+          "type": "observation",
+          "readings": [],
+          "isStationData": false
+        },
+        "updatedTimestamp": "2026-10-26T14:03:34+08:00"
+      }
+    ]
   },
   "errorMsg": ""
 }

@@ -19,7 +19,7 @@ jobs:
       - name: kubeconform (Kubernetes schema, strict)
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
-          ./kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring
+          ./kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds
       - name: shellcheck
         run: shellcheck scripts/*.sh scripts/*/*.sh
 
@@ -60,9 +60,11 @@ jobs:
       - run: docker build -t lifeboat/controller:ci .
       - run: docker build -t lifeboat/webapp:ci workloads/webapp
       - run: docker build -t lifeboat/worker:ci -f workloads/worker/Dockerfile .
+      - run: docker build -t lifeboat/pub-feed:ci -f feeds/Dockerfile .
       - name: smoke-test the images
         run: |
           docker run --rm lifeboat/controller:ci python -c "import lifeboat.controller, lifeboat.operator, feeds.replay; print('controller ok')"
+          docker run --rm lifeboat/pub-feed:ci python -c "import feeds.handler, feeds.pub, feeds.nea; print('feeds ok')"
           docker run --rm lifeboat/worker:ci python -c "import checkpoint, boto3; print('worker ok')"
           docker run -d --name web -p 8000:8000 lifeboat/webapp:ci
           for i in $(seq 1 20); do curl -sf localhost:8000/healthz && break; sleep 1; done

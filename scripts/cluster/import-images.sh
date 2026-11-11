@@ -9,6 +9,9 @@ set -euo pipefail
 
 CLUSTER="${CLUSTER:-lifeboat}"
 IMAGES=(lifeboat/controller:latest lifeboat/webapp:latest lifeboat/worker:latest)
+for img in lifeboat/pub-feed:latest lifeboat/nea-feed:latest; do
+  if docker image inspect "$img" >/dev/null 2>&1; then IMAGES+=("$img"); fi
+done
 SSH_OPTS="${SSH_OPTS:--o StrictHostKeyChecking=accept-new}"
 
 if command -v k3d >/dev/null && k3d cluster list "$CLUSTER" >/dev/null 2>&1; then
