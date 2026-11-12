@@ -7,7 +7,7 @@ S3_MODE  ?= $(shell grep -s '^S3_MODE=' .env | cut -d= -f2)
 PLATFORM ?= linux/amd64
 export CLUSTER
 
-.PHONY: help test itest images cluster cluster-down import k3s-import secrets deploy feeds workloads wait \
+.PHONY: help test itest images cluster cluster-down import k3s-import secrets deploy feeds feeds-off workloads wait \
         monitoring restart replay load demo reset status undeploy scenario lint
 
 help:   ## list targets
@@ -24,11 +24,10 @@ lint:   ## same manifest/script checks as CI (needs yamllint, kubeconform, shell
 	kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds
 	shellcheck scripts/*.sh scripts/*/*.sh
 
-images: ## build the controller, webapp, worker and OpenFaaS feed images
+images: ## build the three images (the live feeds run from the controller image)
 	docker build --platform $(PLATFORM) -t lifeboat/controller:latest .
 	docker build --platform $(PLATFORM) -t lifeboat/webapp:latest workloads/webapp
 	docker build --platform $(PLATFORM) -t lifeboat/worker:latest -f workloads/worker/Dockerfile .
-	docker build --platform $(PLATFORM) -t lifeboat/pub-feed:latest -t lifeboat/nea-feed:latest -f feeds/Dockerfile .
 
 cluster: ## laptop: create a 3-server k3d cluster (embedded etcd), 2 CPUs per node
 	bash scripts/cluster/k3d-up.sh $(CLUSTER)
@@ -50,8 +49,12 @@ deploy: ## namespaces, CRD, RBAC, secrets, checkpoint store, Lifeboat controller
 	@if [ "$(S3_MODE)" != "aws" ]; then kubectl apply -f deploy/05-checkpoint-store.yaml; fi
 	kubectl apply -f deploy/03-lifeboat.yaml
 
-feeds:  ## install OpenFaaS + cron-connector and deploy pub-feed (2m) and nea-feed (5m)
-	bash scripts/deploy-feeds.sh
+feeds:  ## live data.gov.sg feeds: CronJobs pub-feed (S1, every 2 min) and nea-feed (S2, every 5 min)
+	kubectl apply -f deploy/feeds/feeds-cronjobs.yaml
+	@echo "Live feeds on. Run 'make feeds-off' before any replay or experiment (make replay/reset do it)."
+
+feeds-off: ## stop the live feeds (they would override replayed S1/S2 readings)
+	kubectl -n lifeboat delete cronjob pub-feed nea-feed --ignore-not-found --cascade=foreground --wait=true
 
 workloads: ## tiered demo workloads (C1-C4 + placeholders)
 	kubectl apply -f deploy/04-demo-workloads.yaml
@@ -74,7 +77,7 @@ restart: ## restart pods so they pick up newly imported images
 	kubectl -n lifeboat rollout restart deploy/lifeboat
 	kubectl -n lifeboat-demo rollout restart deploy/c1-emergency deploy/c2-portal
 
-replay: ## replay SCENARIO at SPEED x from inside the cluster
+replay: feeds-off ## replay SCENARIO at SPEED x from inside the cluster (stops live feeds first)
 	kubectl -n lifeboat delete job replay --ignore-not-found --wait=true
 	sed -e 's|__SPEED__|$(SPEED)|' -e 's|__SCENARIO__|$(SCENARIO)|' deploy/jobs/replay.yaml | kubectl create -f -
 
@@ -90,7 +93,7 @@ demo: deploy workloads wait load replay ## deploy everything, then start the sur
 	@echo "  kubectl -n lifeboat logs -f job/replay"
 	@echo "  make status"
 
-reset: ## back to a clean L0 state between runs (plan, Lease, workloads, checkpoints)
+reset: feeds-off ## back to a clean L0 state between runs (plan, Lease, workloads, checkpoints)
 	bash scripts/reset.sh
 
 status: ## one-screen view of the cluster and Lifeboat
@@ -101,7 +104,7 @@ status: ## one-screen view of the cluster and Lifeboat
 scenario:
 	python scripts/make_scenario.py
 
-undeploy: ## remove Lifeboat and the demo workloads (keeps the cluster and monitoring)
+undeploy: feeds-off ## remove Lifeboat and the demo workloads (keeps the cluster and monitoring)
 	kubectl -n lifeboat delete job replay locust --ignore-not-found
 	kubectl delete -f deploy/04-demo-workloads.yaml -f deploy/03-lifeboat.yaml --ignore-not-found
 	kubectl delete -f deploy/05-checkpoint-store.yaml --ignore-not-found

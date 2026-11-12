@@ -3,7 +3,6 @@ import json
 import os
 from pathlib import Path
 import socket
-import ssl
 import time
 import urllib.error
 import urllib.request
@@ -87,12 +86,5 @@ def get_json(url: str):
         resp.raise_for_status()
         return resp.json()
     req = urllib.request.Request(url, headers=hdrs)
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read().decode())
-    except urllib.error.URLError as e:
-        if isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
-            ctx = ssl._create_unverified_context()
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
-                return json.loads(resp.read().decode())
-        raise
+    with urllib.request.urlopen(req, timeout=10) as resp:  # TLS verified; never fall back to unverified
+        return json.loads(resp.read().decode())

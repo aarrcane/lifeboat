@@ -54,7 +54,7 @@ make status
 | I want to... | Run |
 |---|---|
 | see what is running | `make status` |
-| deploy live PUB/NEA OpenFaaS feeds (cron) | `make feeds` |
+| turn on live PUB/NEA feeds (CronJobs, 2/5 min) | `make feeds` (off again: `make feeds-off`; never during experiments) |
 | run the flood demo (surge + replay) | `make demo`, then `kubectl -n lifeboat get triageplans -w` |
 | replay faster or another scenario | `make replay SPEED=30 SCENARIO=data/my.jsonl` |
 | start the surge only | `make load` |

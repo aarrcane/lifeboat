@@ -75,26 +75,38 @@ reason (`lifeboat_rejected_readings_total{reason}`).
 
 | Source | Data | TTL | Runs as |
 | --- | --- | --- | --- |
-| S1 PUB flood alerts | data.gov.sg real-time API [2] | 150 s | OpenFaaS function (`*/2 * * * *`) |
-| S2 NEA rainfall | data.gov.sg real-time API [3] | 330 s | OpenFaaS function (`*/5 * * * *`) |
+| S1 PUB flood alerts | data.gov.sg real-time API [2] | 150 s | scheduled function, CronJob (`*/2 * * * *`) |
+| S2 NEA rainfall | data.gov.sg real-time API [3] | 330 s | scheduled function, CronJob (`*/5 * * * *`) |
 | S3 traffic forecast | cluster-wide request rate (Section 4.3) | 60 s | inside the controller |
 
-**OpenFaaS deployment and dual-replica fan-out.** `make feeds` (`scripts/deploy-feeds.sh`)
-installs OpenFaaS (`faas-netes` with the `Function` CRD enabled and `cron-connector`) on k3s via
-Helm, syncs `lifeboat-secrets` (`LIFEBOAT_HMAC_SECRET`) into the `openfaas-fn` namespace, and
-applies `deploy/feeds/openfaas-functions.yaml` (matching `feeds/stack.yml`). Both functions run
-`feeds/handler.py` (`feeds/Dockerfile`), which reads the shared HMAC secret from
-`/var/openfaas/secrets/LIFEBOAT_HMAC_SECRET` (or `LIFEBOAT_HMAC_SECRET` in the environment) and
-serves `/_/health` and `POST /` on port 8080 for `cron-connector` (`pub-feed` every 2 min,
-`nea-feed` every 5 min). When sending a reading, `feeds/common.py:targets()` resolves the
-headless Service `lifeboat-ingest.lifeboat.svc.cluster.local:8081` (`deploy/03-lifeboat.yaml`)
-to all pod IPs and `POST`s every reading to **both** Lifeboat replicas so the standby voter stays
-warm if the active leader crashes.
+**Deployment as scheduled functions, and dual-replica fan-out.** Each feed is a short,
+stateless function (`feeds/handler.py`): fetch the API, score it, sign one reading, send it, exit.
+The proposal planned to host these on OpenFaaS. We kept the code OpenFaaS-compatible
+(`feeds/stack.yml`, `python3-http` `handle()` entrypoint), but run it in the cluster as two
+Kubernetes CronJobs (`deploy/feeds/feeds-cronjobs.yaml`, `make feeds`): `pub-feed` every 2 min and
+`nea-feed` every 5 min, each starting one pod with `python -m feeds.handler --once`. The reason is
+practical: OpenFaaS Community Edition no longer includes the `Function` CRD/operator, and it
+always pulls function images from a registry, while our k3s nodes run images imported by
+`make import`. Adding a registry and a gateway would cost CPU on 2-CPU nodes and add moving parts
+that a 2-to-5-minute schedule does not need. A CronJob gives the same function-as-a-service
+properties that matter here (no idle process, one isolated run per trigger, retries and history
+kept by Kubernetes) with nothing extra to install. `concurrencyPolicy: Forbid` stops overlapping
+runs, `activeDeadlineSeconds: 60` kills a hung fetch, and a failed run simply sends nothing, so
+the previous reading expires by its TTL instead of being trusted forever. The HMAC secret comes
+from `lifeboat-secrets`. When sending, `feeds/common.py:targets()` resolves the headless Service
+`lifeboat-ingest.lifeboat.svc.cluster.local:8081` (`deploy/03-lifeboat.yaml`) to every pod IP and
+`POST`s each reading to **both** Lifeboat replicas, so the standby voter stays warm if the active
+leader crashes. Live feeds and replayed scenarios must not run together, because the voter keeps
+the latest reading per source and a live L0 would replace a replayed L2; `make replay` and
+`make reset` therefore switch the live feeds off first (`make feeds-off`), and all experiments in
+Section 6 use replayed readings.
 
 **Live endpoint checks (`python scripts/demo_p2.py --live`).** Both feeds were verified against
 the live `api-open.data.gov.sg` v2 endpoints (with a custom `User-Agent: lifeboat-feed/1.0`
-header, as the default `Python-urllib` header is blocked with HTTP 403 by Cloudflare) and saved
-under `tests/fixtures/`:
+header, as the default `Python-urllib` header is blocked with HTTP 403 by Cloudflare). The test
+fixtures in `tests/fixtures/` follow the live response shapes; because no PUB flood alert was
+active during our checks, the alert fixture (`pub_flood_alert.json`) is constructed in that shape
+rather than recorded:
 - **S1 PUB flood alerts (`feeds/pub.py`):** Dataset `d_f1404e08587ce555b9ea3f565e2eb9a3` [2] is
   served at `/v2/real-time/api/weather/flood-alerts` (the older `/pub-flood-alerts` slug returns
   HTTP 404). A live check returns `code: 0` with 25 two-minute Common Alerting Protocol (CAP)
@@ -111,10 +123,10 @@ under `tests/fixtures/`:
 rather than hourly rates ($\text{mm/5 min} = \text{mm/hr} \div 12$), `feeds/nea.py` maps the
 island-wide maximum 5-minute reading to a severity vote using two meteorological cut-offs:
 - **`NEA_L1_MM = 2.5` mm / 5 min (30 mm/hr equivalent → L1 Watch):** a moderate-to-heavy tropical
-  downpour. For example, during a live afternoon shower check (`2026-11-11T15:40+08:00`), peak
-  5-minute rainfall reached 5.2 mm (62.4 mm/hr) while PUB reported 0 flood alerts: S2 voted
-  **L1** and S1 voted **L0**, so Lifeboat entered **L1 Watch** (adding one spare C1 pod and
-  pausing non-overdue C4 backups) without falsely triggering L2.
+  downpour. For example, during a live check in an afternoon shower (`2026-11-11T15:40+08:00`),
+  peak 5-minute rainfall was 5.2 mm (62.4 mm/hr) while PUB reported 0 flood alerts, so the
+  feeds scored S2 = L1 and S1 = L0. Under Algorithm 1 one source gives **L1 Watch**, not L2, which
+  is the intended outcome for heavy rain without flooding.
 - **`NEA_L2_MM = 7.5` mm / 5 min (90 mm/hr equivalent → L2 Emergency evidence):** exceeds NEA's
   Heavy Rain Warning threshold of 70 mm/hr (~5.8 mm/5 min) associated with flash flood risk,
   requiring intense storm rainfall (such as the 11.4 mm / 5 min Bukit Timah reading in
@@ -208,7 +220,7 @@ go to MinIO on laptops and Amazon S3 on AWS. TODO (P3).
 | --- | --- |
 | Cluster | k3s on 3 servers with embedded etcd [18]; k3d on laptops; AWS: 3 × t3.large (about US$0.26/h, Learner Lab) |
 | Controller | Python + Kopf, 2 replicas, own Lease logic |
-| Feeds | serverless functions (OpenFaaS, `feeds/stack.yml`) |
+| Feeds | scheduled functions as Kubernetes CronJobs (`deploy/feeds/feeds-cronjobs.yaml`); same handlers packaged for OpenFaaS in `feeds/stack.yml` |
 | State | TriagePlan CRD (`deploy/00-namespaces-crd.yaml`), Secrets encrypted at rest (k3s `--secrets-encryption`) |
 | Checkpoints | MinIO (laptop), Amazon S3 (AWS) |
 | Monitoring | kube-prometheus-stack (Prometheus + Grafana), PodMonitors, alert rules |
@@ -303,6 +315,9 @@ the Figure 2 scenario. TODO (P3).
 - **Prometheus dependency.** S3 and L3 detection need Prometheus; Lifeboat fails safe without
   it, but production should run Prometheus with two replicas.
 - **No seasonality.** Holt-Winters could model daily traffic patterns.
+- **Feeds on CronJobs, not OpenFaaS.** The feed handlers are OpenFaaS-compatible but run as
+  CronJobs (Section 4.1). With a container registry, `faas-cli up -f feeds/stack.yml` would move
+  them to OpenFaaS without code changes.
 - **Tuning.** N, X, Y, NEA cut-offs and `cost_millis_per_rps` were set from the proposal and
   limited experiments.
 - **"Isn't this just pod priority?"** B0 is exactly that; E1–E3 compare against it on the same
@@ -317,7 +332,7 @@ and the most important lesson.
 
 | Role | Member | Main work |
 | --- | --- | --- |
-| P2 Signals, voter & feeds | Lucas Leow (2502908) | signing, ingest, 2-of-3 voter, PUB/NEA OpenFaaS feeds, E4 scenarios |
+| P2 Signals, voter & feeds | Lucas Leow (2502908) | signing, ingest, 2-of-3 voter, PUB/NEA live feeds, E4 scenarios |
 | P3 Planner, executor & HA | TODO | planner, checkpointing, executor, Lease/TriagePlan fencing, E3/E5 |
 | P4 Cluster, deploy & AWS | TODO | k3s HA, manifests, CI, MinIO/S3, AWS EC2 |
 | P5 Web load & baselines | TODO | C1/C2 web app, Locust surge, B0–B2, E1/E2 |

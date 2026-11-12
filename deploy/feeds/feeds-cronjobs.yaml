@@ -1,0 +1,78 @@
+# Live warning feeds S1 (PUB flood alerts, every 2 min) and S2 (NEA rainfall, every 5 min).
+# Each run is one short-lived, stateless function call: fetch data.gov.sg -> score -> sign ->
+# POST to both Lifeboat replicas through the headless lifeboat-ingest Service, then exit.
+# Same code as the OpenFaaS functions in feeds/stack.yml (feeds/handler.py). We schedule it with
+# Kubernetes CronJobs because OpenFaaS CE no longer ships the Function CRD/operator and always
+# pulls function images from a registry, which our k3s nodes (images imported with
+# `make import`) do not use. See docs/report/REPORT.md Section 4.1.
+#
+# `make feeds` applies this file; `make feeds-off` removes it. `make replay` and `make reset`
+# run `feeds-off` first, because live S1/S2 readings would replace the replayed ones in the
+# voter (it keeps the latest reading per source) and spoil E1-E5 runs.
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: pub-feed, namespace: lifeboat, labels: {app: lifeboat-feed, source: s1}}
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 60
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata: {labels: {app: lifeboat-feed, source: s1}}
+        spec:
+          restartPolicy: Never
+          priorityClassName: lifeboat-system
+          containers:
+            - name: feed
+              image: lifeboat/controller:latest
+              imagePullPolicy: IfNotPresent
+              command: [python, -u, -m, feeds.handler, --once]
+              env:
+                - {name: FEED_SOURCE, value: "S1"}
+                - {name: PUB_URL, value: "https://api-open.data.gov.sg/v2/real-time/api/weather/flood-alerts"}
+                - {name: PUB_TTL_S, value: "150"}
+              envFrom: [{secretRef: {name: lifeboat-secrets}}]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 128Mi}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: nea-feed, namespace: lifeboat, labels: {app: lifeboat-feed, source: s2}}
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 60
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata: {labels: {app: lifeboat-feed, source: s2}}
+        spec:
+          restartPolicy: Never
+          priorityClassName: lifeboat-system
+          containers:
+            - name: feed
+              image: lifeboat/controller:latest
+              imagePullPolicy: IfNotPresent
+              command: [python, -u, -m, feeds.handler, --once]
+              env:
+                - {name: FEED_SOURCE, value: "S2"}
+                - {name: NEA_URL, value: "https://api-open.data.gov.sg/v2/real-time/api/rainfall"}
+                - {name: NEA_TTL_S, value: "330"}
+                - {name: NEA_L1_MM, value: "2.5"}
+                - {name: NEA_L2_MM, value: "7.5"}
+              envFrom: [{secretRef: {name: lifeboat-secrets}}]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 128Mi}

@@ -1,11 +1,13 @@
 """OpenFaaS function entrypoint for S1 (PUB flood alerts) and S2 (NEA rainfall).
 
-Works in two modes:
-  1. OpenFaaS python3-http template (`faas-cli build -f feeds/stack.yml`):
+Works in three modes, all calling the same `handle()`:
+  1. One-shot (`python -u -m feeds.handler --once`): what the cluster runs. The Kubernetes
+     CronJobs in deploy/feeds/feeds-cronjobs.yaml (`make feeds`) start one short-lived pod per
+     tick; it fetches, scores, signs and sends one reading, then exits (non-zero on failure).
+  2. OpenFaaS python3-http template (`faas-cli build -f feeds/stack.yml`):
      imports `handle(event, context)` from this module.
-  2. Direct OpenFaaS function container (`python -u -m feeds.handler`):
-     serves HTTP on port 8080 (`/_/health`, `/healthz`, `POST /`, `GET /`) for
-     faas-netes and cron-connector invocations.
+  3. Function container (`python -u -m feeds.handler`): serves HTTP on port 8080
+     (`/_/health`, `/healthz`, `POST /`, `GET /`) for faas-netes and cron-connector.
 """
 from __future__ import annotations
 
@@ -50,6 +52,17 @@ def handle_http(method: str, path: str, raw_body: bytes = b"") -> tuple[int, dic
         return 502, {"error": str(exc), "source": resolve_source(ev)}
 
 
+def run_once() -> int:
+    """One CronJob tick. Exit 0 only if at least one Lifeboat replica accepted the reading."""
+    try:
+        res = handle()
+    except Exception as exc:  # fetch/parse failure: no reading is sent, Lifeboat's TTL expires it
+        print(json.dumps({"source": resolve_source(), "error": str(exc)}), flush=True)
+        return 1
+    print(json.dumps(res), flush=True)
+    return 0 if any(200 <= c < 300 for c in res.get("sent", [])) else 1
+
+
 def serve(port: int = 8080, host: str = "0.0.0.0") -> ThreadingHTTPServer:
     class FeedHandler(BaseHTTPRequestHandler):
         def _reply(self, code: int, payload: dict) -> None:
@@ -77,6 +90,10 @@ def serve(port: int = 8080, host: str = "0.0.0.0") -> ThreadingHTTPServer:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    if "--once" in sys.argv[1:]:
+        sys.exit(run_once())
     port = int(os.getenv("PORT", "8080"))
     srv = serve(port=port)
     srv.serve_forever()

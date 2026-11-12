@@ -17,7 +17,7 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 | `scripts/plot_results.py`, `export_e4.py`, `e5_crash_test.py` | results CSVs -> figures; E4 export; E5 kill test on a cluster | E1-E5 |
 | `docs/RESULTS_FORMAT.md`, `docs/report/` | CSV contracts; report draft and video plan | report |
 | `lifeboat/controller.py`, `operator.py` | sense-decide-act loop, Kopf entrypoint | Fig. 1 |
-| `feeds/`, `deploy/feeds/`, `scripts/deploy-feeds.sh` | PUB (S1) / NEA (S2) OpenFaaS functions (`make feeds`), replayer | Sec. 4.1, 5 |
+| `feeds/`, `deploy/feeds/` | PUB (S1) / NEA (S2) feed functions, run as CronJobs (`make feeds`; OpenFaaS packaging in `feeds/stack.yml`), replayer | Sec. 4.1, 5 |
 | `workloads/` | C1/C2 web app, C3/C4 checkpointing worker | Sec. 6 |
 | `deploy/` | CRD, RBAC, 2-replica Lifeboat, demo tiers, PodMonitors | |
 | `loadtest/` | Locust 20x surge | E1/E2 |
@@ -46,7 +46,7 @@ In the cluster, checkpoints go to S3: MinIO on laptops (`deploy/05-checkpoint-st
 - Tested against a real k3s API server (`make itest`, also in CI) as the lifeboat ServiceAccount: `lease.py`, `k8s_plan_store.py`, `k8s_actions.py`, `discovery.py`, `controller.py`, RBAC and all manifests. Covers L2 triage, standby takeover with fencing, and revert to original settings.
 - **Not yet run with real pods** (needs images on nodes): checkpoint save/resume through MinIO, Prometheus queries, the replay and Locust Jobs. First `make demo` on k3d will tell.
 - P6: PromQL in `config.py`, every dashboard query and the alert rules checked against a real Prometheus scraping the real webapp (`scripts/p6_live_check.py`, no cluster). Still to check in the cluster: PodMonitor scraping and the Grafana sidecar loading the dashboard. Forecast alpha tuned to 0.3 by `scripts/demo_p6.py` on synthetic traces; re-tune on P5's recorded Locust traffic.
-- P2: `PUB_URL` (`/v2/real-time/api/weather/flood-alerts`) and `NEA_URL` (`/v2/real-time/api/rainfall`) parsers verified against live `data.gov.sg` v2 responses (`python scripts/demo_p2.py --live`); OpenFaaS deployment automated via `make feeds` (`scripts/deploy-feeds.sh`, `deploy/feeds/openfaas-functions.yaml`).
+- P2: `PUB_URL` (`/v2/real-time/api/weather/flood-alerts`) and `NEA_URL` (`/v2/real-time/api/rainfall`) parsers verified against live `data.gov.sg` v2 responses (`python scripts/demo_p2.py --live`); live feeds deployed as CronJobs via `make feeds` (`deploy/feeds/feeds-cronjobs.yaml`); `make replay`/`make reset` switch them off first so they cannot override replayed readings.
 - Voter calm-period state is per replica (not shared); a freshly promoted standby may lag by one calm period when stepping down.
 - Thresholds N, X, Y, `cost_millis_per_rps` need cluster tuning (`lifeboat/config.py`).
 - Everyone deploying to the same cluster needs the same `.env` (shared privately, see docs/CLUSTER.md).

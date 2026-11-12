@@ -43,6 +43,12 @@ jobs:
       - name: make deploy workloads
         run: make deploy workloads
         env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
+      - name: make feeds, then feeds-off (live feed CronJobs accepted by a real API server)
+        run: |
+          make feeds
+          kubectl -n lifeboat get cronjob pub-feed nea-feed
+          make feeds-off
+        env: {KUBECONFIG: /etc/rancher/k3s/k3s.yaml}
       - name: Secrets are encrypted at rest
         # `k3s secrets-encrypt status` needs a node, and this control plane has none,
         # so check the apiserver was started with the encryption config instead.
@@ -63,7 +69,7 @@ jobs:
       - run: docker build -t lifeboat/pub-feed:ci -f feeds/Dockerfile .
       - name: smoke-test the images
         run: |
-          docker run --rm lifeboat/controller:ci python -c "import lifeboat.controller, lifeboat.operator, feeds.replay; print('controller ok')"
+          docker run --rm lifeboat/controller:ci python -c "import lifeboat.controller, lifeboat.operator, feeds.replay, feeds.handler; print('controller ok')"
           docker run --rm lifeboat/pub-feed:ci python -c "import feeds.handler, feeds.pub, feeds.nea; print('feeds ok')"
           docker run --rm lifeboat/worker:ci python -c "import checkpoint, boto3; print('worker ok')"
           docker run -d --name web -p 8000:8000 lifeboat/webapp:ci

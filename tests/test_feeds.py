@@ -96,3 +96,15 @@ def test_openfaas_secret_file_and_handler_server(tmp_path):
             200,
             {"source": "S1", "level": 2, "sent": [202, 202]},
         )
+
+
+def test_cronjob_run_once_exit_codes():
+    with patch.object(common, "get_json", return_value=_load("pub_flood_alert.json")), \
+         patch.dict(os.environ, {"FEED_SOURCE": "S1"}):
+        with patch.object(common, "send", return_value=[202, 202]):
+            assert handler.run_once() == 0
+        with patch.object(common, "send", return_value=[401, 0]):
+            assert handler.run_once() == 1  # no replica accepted the reading
+    with patch.object(common, "get_json", side_effect=OSError("data.gov.sg down")), \
+         patch.dict(os.environ, {"FEED_SOURCE": "S2"}):
+        assert handler.run_once() == 1  # nothing sent; the old reading expires by its TTL

@@ -1,5 +1,7 @@
-# OpenFaaS (faas-netes on k3s). Deploy with `make feeds` (scripts/deploy-feeds.sh)
-# or `faas-cli up -f feeds/stack.yml`.
+# Optional OpenFaaS packaging of the same feed handlers (feeds/handler.py).
+# The cluster runs them as Kubernetes CronJobs instead (`make feeds`, deploy/feeds/feeds-cronjobs.yaml):
+# OpenFaaS CE has no Function CRD and always pulls function images from a registry, so this path
+# needs `faas-cli up -f feeds/stack.yml` with the images pushed to a registry first.
 version: 1.0
 provider:
   name: openfaas
