@@ -228,9 +228,37 @@ go to MinIO on laptops and Amazon S3 on AWS. TODO (P3).
 
 TODO (P4): AWS instance types, cost, one-command deploy, secrets handling.
 
+**Running the feeds: platforms considered.** The two feeds are tiny scheduled functions (one HTTP
+call every 2 or 5 minutes, Section 4.1), and the cluster they run on is the one Lifeboat is trying
+to free capacity in, so the platform must cost less than the work. We compared four options:
+
+| Option | Free? | Fit for our cluster | Decision |
+| --- | --- | --- | --- |
+| OpenFaaS CE [19] (planned in the proposal) | yes, but the `Function` CRD/operator and `IfNotPresent` image pulls are Pro-only | CE always pulls function images from a registry; our nodes run images imported by `make import`, so it needs a registry plus a gateway | handlers kept OpenFaaS-ready (`feeds/stack.yml`), not deployed |
+| Knative Serving + Eventing `PingSource` [20] | yes (CNCF graduated) | needs its own networking layer and several control-plane pods; resolves image tags through a registry by default | too heavy for 2-CPU nodes |
+| Fission [21] | yes (Apache 2.0) | chart 1.27+ needs Kubernetes ≥ 1.32 (we pin k3s v1.31.4); about seven extra pods plus a volume; our handlers need a build step for the `lifeboat` package | not worth it this term; reviewed from its chart and repository, not installed |
+| Kubernetes CronJob [22] | built in | nothing to install; runs the controller image already on every node | **chosen** |
+
+A CronJob keeps the properties we wanted from serverless for these feeds: nothing runs between
+triggers, every trigger is a fresh isolated pod, overlapping runs are refused
+(`concurrencyPolicy: Forbid`), a hung run is killed after 60 s, and Kubernetes keeps the run
+history. What it does not give is an HTTP gateway or scale-to-many, which a 2-to-5-minute poll does
+not need. Moving the feeds to a FaaS platform later needs no code change, only a registry
+(`faas-cli up -f feeds/stack.yml`).
+
 ## 6. Evaluation
 
 ### 6.1 Method
+
+**Live versus replayed warnings.** Lifeboat has two ways to receive S1/S2 readings. *Live*:
+`make feeds` polls the real data.gov.sg PUB and NEA APIs and sends signed readings, which shows the
+real data path works. *Replayed*: `make replay` sends a scripted scenario through the same ingest
+endpoint, with the same signing and TTLs. All experiments use replayed warnings, because a real
+flood cannot be scheduled and every run must see the same inputs for the comparison with the
+baselines to be fair. The scenarios in `data/*.jsonl` are hand-written to follow the shape of the
+live data, not recordings of a real flood. The two are never mixed in one run: the voter keeps
+only the latest reading per source, so a live L0 would cancel a replayed L2, and `make replay`
+therefore stops the live feeds first.
 
 All experiments replay the same scripted Singapore flash flood (`data/scenario_flash_flood.jsonl`)
 while Locust sends a ~20× traffic surge at C1 and C2 and C3/C4 jobs run. Baselines on the same
@@ -310,6 +338,10 @@ the Figure 2 scenario. TODO (P3).
 
 - **Simulated inputs.** There is no real flood on demo day, so warnings are replayed and the
   forecast was tuned on synthetic traffic; re-tuning on recorded Locust traffic is future work.
+  The live feeds were checked against the real APIs (Section 4.1), but no real PUB flood alert
+  occurred during the project, so the L2 path from a real PUB alert is tested only with a
+  constructed fixture. TODO (P4): run `make feeds` on the AWS cluster after the experiments and
+  record the accepted live readings (feed job logs showing HTTP 202) as end-to-end evidence.
 - **Voter state per replica.** The calm-period timer is not shared, so a newly promoted standby
   may step down one calm period later.
 - **Prometheus dependency.** S3 and L3 detection need Prometheus; Lifeboat fails safe without
@@ -358,3 +390,7 @@ and the most important lesson.
 [16] Hyndman & Athanasopoulos, Forecasting: Principles and Practice, 3rd ed., §8.2 (Holt linear trend). https://otexts.com/fpp3/holt.html
 [17] Kubernetes: Leases. https://kubernetes.io/docs/concepts/architecture/leases/
 [18] K3s datastore options. https://docs.k3s.io/datastore
+[19] OpenFaaS editions (Community Edition vs Pro). https://docs.openfaas.com/openfaas-pro/introduction/
+[20] Knative documentation (Serving, Eventing PingSource). https://knative.dev/docs/
+[21] Fission: serverless functions for Kubernetes (Helm chart `fission-all`). https://fission.io/docs/
+[22] Kubernetes: CronJob. https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/
