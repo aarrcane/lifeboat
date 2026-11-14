@@ -1,0 +1,21 @@
+# E3: prints every worker lifecycle event (start/term/done) from the checkpoint store as
+# `E3EVENT {...}` lines. scripts/run_experiment.py creates it after each run, reads the log
+# and deletes it. Same image and S3 Secret as the controller.
+apiVersion: batch/v1
+kind: Job
+metadata: {name: e3-collect, namespace: lifeboat, labels: {app: lifeboat-e3}}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata: {labels: {app: lifeboat-e3}}
+    spec:
+      restartPolicy: Never
+      priorityClassName: lifeboat-system
+      containers:
+        - name: collect
+          image: lifeboat/controller:latest
+          imagePullPolicy: IfNotPresent
+          command: [python, -u, -m, lifeboat.e3_collect]
+          envFrom: [{secretRef: {name: lifeboat-s3}}]
+          resources: {requests: {cpu: 50m, memory: 64Mi}}

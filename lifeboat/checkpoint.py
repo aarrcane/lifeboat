@@ -3,6 +3,8 @@
   <name>/data-<ts>.json   the saved state (uploaded FIRST)
   <name>/latest.json      manifest {"ts":..} (written LAST => a checkpoint only counts once complete)
   requests/<name>.json    {"ts":..} written by Lifeboat to ask the app to save now
+  events/<name>/<ts>-<kind>.json   {"name","kind","unit","ts"} lifecycle event (start|term|done),
+                          written by the worker for E3 (pod logs vanish when a Job is suspended)
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from typing import Optional
 class CheckpointStore:
     def _put(self, key: str, data: bytes) -> None: raise NotImplementedError
     def _get(self, key: str) -> Optional[bytes]: raise NotImplementedError
+    def list_keys(self, prefix: str) -> list[str]: raise NotImplementedError
 
     # ---- app side
     def save(self, name: str, state: dict) -> float:
@@ -34,6 +37,21 @@ class CheckpointStore:
     def last_request_ts(self, name: str) -> float:
         raw = self._get(f"requests/{name}.json")
         return json.loads(raw)["ts"] if raw else 0.0
+
+    # ---- E3 lifecycle events (app side writes, e3_collect reads)
+    def record_event(self, name: str, kind: str, unit: int) -> dict:
+        ts = time.time()
+        ev = {"name": name, "kind": kind, "unit": int(unit), "ts": ts}
+        self._put(f"events/{name}/{ts:.3f}-{kind}.json", json.dumps(ev).encode())
+        return ev
+
+    def events(self) -> list[dict]:
+        out = []
+        for key in self.list_keys("events/"):
+            raw = self._get(key)
+            if raw:
+                out.append(json.loads(raw))
+        return sorted(out, key=lambda e: e["ts"])
 
     # ---- Lifeboat side
     def latest_ts(self, name: str) -> Optional[float]:
@@ -65,6 +83,17 @@ class FileCheckpointStore(CheckpointStore):
         except FileNotFoundError:
             return None
 
+    def list_keys(self, prefix: str) -> list[str]:
+        out = []
+        for dirpath, _dirs, files in os.walk(self.root):
+            for f in files:
+                if f.endswith(".tmp"):
+                    continue
+                key = os.path.relpath(os.path.join(dirpath, f), self.root).replace(os.sep, "/")
+                if key.startswith(prefix):
+                    out.append(key)
+        return sorted(out)
+
 
 class S3CheckpointStore(CheckpointStore):
     def __init__(self, bucket: str, endpoint: str = ""):
@@ -95,6 +124,12 @@ class S3CheckpointStore(CheckpointStore):
             return self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
         except self.s3.exceptions.NoSuchKey:
             return None
+
+    def list_keys(self, prefix: str) -> list[str]:
+        out = []
+        for page in self.s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
+            out.extend(o["Key"] for o in page.get("Contents", []))
+        return sorted(out)
 
 
 def from_env() -> CheckpointStore:

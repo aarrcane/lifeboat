@@ -68,7 +68,7 @@ metadata:
 spec:
   parallelism: 1                  # ONE pod per checkpoint name: two pods sharing WORK_NAME
   completions: 1                  # would overwrite each other's progress (breaks E3)
-  backoffLimit: 20
+  backoffLimit: 100               # a preempted worker exits 143 (a failure): allow many
   template:
     metadata: {labels: {lifeboat.io/tier: C3}}
     spec:
@@ -82,6 +82,8 @@ spec:
           envFrom: [{secretRef: {name: lifeboat-s3}}]
           env:
             - {name: WORK_NAME, value: c3-analytics}
+            - {name: UNIT_SECONDS, value: "0.05"}           # E3: progress_lost_s = units x this
+            - {name: SAVE_ON_TERM, value: "true"}           # false: an app that ignores SIGTERM
           resources: {requests: {cpu: "1", memory: 64Mi}}     # same room as the old 2 x 500m
 ---
 apiVersion: batch/v1
@@ -92,7 +94,7 @@ metadata:
   labels: {lifeboat.io/tier: C4}
   annotations: {lifeboat.io/restart-seconds: "10", lifeboat.io/overdue: "false"}
 spec:
-  backoffLimit: 20
+  backoffLimit: 100               # a preempted worker exits 143 (a failure): allow many
   template:
     metadata: {labels: {lifeboat.io/tier: C4}}
     spec:
@@ -106,6 +108,8 @@ spec:
           envFrom: [{secretRef: {name: lifeboat-s3}}]
           env:
             - {name: WORK_NAME, value: c4-backup}
+            - {name: UNIT_SECONDS, value: "0.05"}           # E3: progress_lost_s = units x this
+            - {name: SAVE_ON_TERM, value: "true"}           # false: an app that ignores SIGTERM
           resources: {requests: {cpu: 500m, memory: 64Mi}}
 ---
 # Spare-room placeholders: baseline B1 (kept free) and Lifeboat's L0/L1 headroom.

@@ -75,3 +75,36 @@ def test_s3_client_has_short_timeouts(monkeypatch):
     cfg = seen["config"]
     assert cfg.connect_timeout == 2 and cfg.read_timeout == 3
     assert cfg.retries["max_attempts"] == 2
+
+
+def test_list_keys_and_lifecycle_events(tmp_path):
+    s = FileCheckpointStore(str(tmp_path))
+    s.save("c3", {"unit": 5})
+    s.record_event("c3", "start", 0)
+    s.record_event("c3", "term", 40)
+    s.record_event("c4", "start", 0)
+    assert s.list_keys("events/c3/") == sorted(s.list_keys("events/c3/"))
+    assert len(s.list_keys("events/")) == 3 and len(s.list_keys("c3/")) == 2
+    evs = s.events()
+    assert [(e["name"], e["kind"], e["unit"]) for e in evs] == [("c3", "start", 0), ("c3", "term", 40),
+                                                                ("c4", "start", 0)]
+    assert set(evs[0]) == {"name", "kind", "unit", "ts"}
+
+
+def test_e3_maths():
+    from lifeboat.e3_collect import by_workload, parse_log, progress_lost_s, restore_s
+    log = "\n".join([
+        "starting...",
+        'E3EVENT {"kind": "start", "name": "c3", "ts": 100.0, "unit": 0}',
+        'E3EVENT {"kind": "term", "name": "c3", "ts": 200.0, "unit": 1000}',
+        'E3EVENT {"kind": "start", "name": "c3", "ts": 500.0, "unit": 990}',     # 10 units redone
+        'E3EVENT {"kind": "term", "name": "c3", "ts": 600.0, "unit": 2000}',
+        'E3EVENT {"kind": "start", "name": "c3", "ts": 700.0, "unit": 1400}',    # 600 units redone
+        'E3EVENT {"kind": "start", "name": "c4", "ts": 100.0, "unit": 0}',
+    ])
+    evs = by_workload(parse_log(log))
+    assert progress_lost_s(evs["c3"], 0.05) == 30.5
+    assert restore_s(evs["c3"], crisis_end_ts=430.0) == 270.0                  # last start after the end
+    assert progress_lost_s(evs["c4"], 0.05) == 0 and restore_s(evs["c4"], 430.0) == 0.0
+    stuck = evs["c3"][:2]                                                       # paused, never back
+    assert restore_s(stuck, 430.0) is None

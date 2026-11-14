@@ -7,7 +7,7 @@ setup** (proposal Section 6) and put every run in the same CSV with a `run` colu
 | Exp | CSV | Produced by | Status |
 | --- | --- | --- | --- |
 | E1/E2 | `e1_e2_summary.csv` | P5 (`scripts/run_p5_baseline.py`) | baseline model numbers; replace with cluster runs |
-| E3 | `e3_work_saved.csv` | P3 | **missing** |
+| E3 | `e3_work_saved.csv` | `scripts/run_experiment.py` from the worker events (`lifeboat/e3_collect.py`) | needs cluster runs |
 | E4 | `e4_alerts.csv` | `scripts/export_e4.py` (P2's evaluation) | done (offline replay through the real voter) |
 | E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` on the cluster (P3 + P6) | **missing**: needs a cluster run |
 
@@ -24,6 +24,21 @@ setup** (proposal Section 6) and put every run in the same CSV with a `run` colu
 | `workload` | `c3-analytics` or `c4-backup` |
 | `progress_lost_s` | seconds of work redone after resuming (work since the last checkpoint that was used) |
 | `restore_s` | seconds from crisis end until the workload is running again at its original settings |
+
+How it is measured: each worker writes a lifecycle event through the checkpoint store
+(`events/<name>/<ts>-<kind>.json`, `{"name","kind","unit","ts"}`) when it starts (after loading
+its checkpoint), first thing on SIGTERM (`term`) and when it finishes (`done`). Pod logs vanish
+when a Job is suspended, the store does not. After a run, `deploy/jobs/e3-collect.yaml` prints
+them as `E3EVENT {...}` lines and the runner computes:
+
+- `progress_lost_s` = for each `term` followed by the next `start` of the same workload,
+  `max(0, term.unit - start.unit) x UNIT_SECONDS` (0.05 s), summed.
+- `restore_s` = time of the last `start` after the crisis end (t = 330 s) minus t = 330; 0 if the
+  workload was never interrupted; empty if it was not back within the wait.
+
+The worker saves on SIGTERM by default. `SAVE_ON_TERM=false` models an app that ignores SIGTERM,
+the case Lifeboat's "checkpoint before pause" is for. On SIGTERM with work left it exits 143, so
+a preempted or deleted pod never marks the Job Complete.
 
 Example:
 ```csv
