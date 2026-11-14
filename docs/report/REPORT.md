@@ -251,8 +251,9 @@ three-server k3d cluster. `scripts/aws/down.sh` deletes every AWS resource `up.s
 S3 objects and Helm releases into `results/aws_evidence/`.
 
 **Network and identity.** The security group lets the nodes talk freely to each other and opens
-SSH (22), the Kubernetes API (6443) and the NodePort range only to the operator's own IP
-(`ALLOW_CIDR`). The Learner Lab does not allow IAM users, so nothing in the cluster holds an AWS
+SSH (22 and 443), the Kubernetes API (6443) and the NodePort range only to the operator's own IP
+(`ALLOW_CIDR`). Every node's sshd also listens on 443, so SSH still works from networks that block
+outbound port 22 (`SSH_PORT=443`). The Learner Lab does not allow IAM users, so nothing in the cluster holds an AWS
 access key: the instances run with `LabInstanceProfile`, and the checkpoint code reaches S3
 through the instance metadata service. IMDSv2 is required (session tokens only) with a hop limit
 of 2, which is what lets a pod, one network hop further than the host, use the profile.
