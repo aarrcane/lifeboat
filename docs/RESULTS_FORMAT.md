@@ -6,14 +6,35 @@ setup** (proposal Section 6) and put every run in the same CSV with a `run` colu
 
 | Exp | CSV | Produced by | Status |
 | --- | --- | --- | --- |
-| E1/E2 | `e1_e2_summary.csv` | P5 (`scripts/run_p5_baseline.py`) | baseline model numbers; replace with cluster runs |
+| E1/E2 | `e1_e2_summary.csv`, `runs/<setup>-<run>/timeline.csv` | `scripts/run_experiment.py` on the cluster | needs cluster runs. The old model numbers are in `model/e1_e2_model.csv` (`scripts/run_p5_baseline.py --dry-run`): a model prediction, never a result |
 | E3 | `e3_work_saved.csv` | `scripts/run_experiment.py` from the worker events (`lifeboat/e3_collect.py`) | needs cluster runs |
 | E4 | `e4_alerts.csv` | `scripts/export_e4.py` (P2's evaluation) | done (offline replay through the real voter) |
 | E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` on the cluster (P3 + P6) | **missing**: needs a cluster run |
 
-## E1/E2 `e1_e2_summary.csv` (P5)
+## E1/E2 `e1_e2_summary.csv` (`scripts/run_experiment.py`)
 
-`setup,name,e1_time_to_capacity_s,c1_served_pct,p50_ms,p95_ms` with `setup` in `B0, B1, B2, lifeboat`.
+One row per setup and run. Every setup sees the same load (`loadtest/locustfile.py`, 10 users,
+200 users from t = 150 s to 330 s) and, for B2 and lifeboat, the same replayed warnings
+(`data/scenario_experiment.jsonl`: L2 from t = 90 s, 60 s before the surge, until 330 s).
+
+| Column | Meaning |
+| --- | --- |
+| `setup`, `run` | `B0` (HPA + pod priority), `B1` (B0 + spare room), `B2` (Lifeboat, warnings off), `lifeboat`; 1 to 3 |
+| `e1_surge_to_capacity_s` | seconds from t = 150 until C1 has 10 ready pods (10 = 120 req/s x 20m / 250m). Negative if ready before the surge. Empty if never. Comparable across all setups. |
+| `alert_to_ready_s` | B2 and lifeboat only: seconds from the first level change to all planned C1 pods ready (the proposal's "first alert to C1 healthy, target under 30 s") |
+| `c1_ready_at_surge` | ready C1 pods at t = 150 |
+| `c1_served_pct`, `p50_ms`, `p95_ms` | from Locust (`RESULT` lines), surge window only, C1. Served = came back as a 200 within 0.5 s |
+| `c2_served_pct` | same for C2 (what L2 costs C2 and what L3 feature shedding gives back) |
+
+`runs/<setup>-<run>/timeline.csv` (one row per second: `t,c1_ready,c1_spec,level,plan_steps,
+c3_suspend,c3_active,c4_suspend,c4_active,placeholder_ready`) feeds `figures/e1_timeline.png`;
+`locust.log` and `e3.log` are kept next to it as evidence.
+
+```bash
+python3 scripts/run_experiment.py --setup all --runs 1   # rehearsal (k3d)
+python3 scripts/run_experiment.py --setup all --runs 3   # the matrix (AWS, on server-1, in tmux)
+python scripts/plot_results.py
+```
 
 ## E3 `e3_work_saved.csv` (P3)
 

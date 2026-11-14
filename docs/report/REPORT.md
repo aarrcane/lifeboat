@@ -280,7 +280,7 @@ cool-down: HPA scale-down window 60 s, `LIFEBOAT_CALM_MINUTES=1`. Each setup run
 ![E1](../../results/figures/e1_time_to_capacity.png)
 ![E2](../../results/figures/e2_service_quality.png)
 
-Current numbers come from P5's baseline model (`results/e1_e2_summary.csv`), not yet a cluster
+Current numbers come from P5's baseline model (`results/model/e1_e2_model.csv`, a model prediction, not measured), not yet a cluster
 run **[pending]**. TODO (P5): replace with 3 cluster runs per setup.
 
 ### 6.3 E3 work saved (P3)

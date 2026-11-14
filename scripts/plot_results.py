@@ -21,47 +21,100 @@ def _rows(name: str) -> list[dict] | None:
     return list(csv.DictReader(open(p, newline=""))) if p.exists() else None
 
 
+ORDER = ("B0", "B1", "B2", "lifeboat")
+SHORT = {"B0": "B0\nHPA + priority", "B1": "B1\n+ spare room", "B2": "B2\nno warnings",
+         "lifeboat": "Full\nLifeboat"}
+
+
+def _stats(rows: list[dict], col: str) -> dict[str, tuple[float, float, float]]:
+    """setup -> (mean, min, max) over the runs, ignoring empty cells."""
+    acc: dict[str, list[float]] = {}
+    for r in rows:
+        if r.get(col, "") != "":
+            acc.setdefault(r["setup"], []).append(float(r[col]))
+    return {k: (sum(v) / len(v), min(v), max(v)) for k, v in acc.items()}
+
+
+def _bars(ax, setups, stats, fmt, missing="never"):
+    """Mean of the runs as bars, min/max as whiskers."""
+    means = [stats[s][0] if s in stats else 0.0 for s in setups]
+    err = [[stats[s][0] - stats[s][1] if s in stats else 0 for s in setups],
+           [stats[s][2] - stats[s][0] if s in stats else 0 for s in setups]]
+    b = ax.bar([SHORT.get(s, s) for s in setups], means, yerr=err, capsize=4,
+               color=[COLORS.get(s, "#555") for s in setups])
+    ax.bar_label(b, [fmt(stats[s][0]) if s in stats else missing for s in setups], padding=2)
+    ax.margins(y=0.15)
+    return b
+
+
 def e1_e2(plt) -> list[str]:
+    """results/e1_e2_summary.csv from scripts/run_experiment.py (one row per setup and run)."""
     rows = _rows("e1_e2_summary.csv")
     if not rows:
         return []
-    short = {"B0": "B0\npriority", "B1": "B1\nspare room", "B2": "B2\nno warnings", "lifeboat": "Full\nLifeboat"}
-    labels = [short.get(r["setup"], r["setup"]) for r in rows]
-    colors = [COLORS.get(r["setup"], "#555") for r in rows]
+    setups = [s for s in ORDER if any(r["setup"] == s for r in rows)]
+    runs = max(int(r["run"]) for r in rows)
 
     fig, ax = plt.subplots(figsize=(7, 3.8))
-    vals = [float(r["e1_time_to_capacity_s"]) for r in rows]
-    bars = ax.bar(labels, vals, color=colors)
-    ax.axhline(30, ls="--", color="red", lw=1, label="target: under 30 s")
-    ax.bar_label(bars, [f"{v:.0f} s" for v in vals])
-    ax.set_ylabel("seconds from first alert to C1 capacity")
-    ax.set_title("E1: time to capacity (lower is better)")
-    ax.legend()
+    _bars(ax, setups, _stats(rows, "e1_surge_to_capacity_s"), lambda v: f"{v:.0f} s")
+    ax.axhline(0, color="black", lw=0.8)
+    ax.set_ylabel("s from surge start to 10 ready C1 pods")
+    ax.set_title(f"E1: time to capacity (lower is better; below 0 = ready before the surge; "
+                 f"{runs} run(s), min/max)", fontsize=9)
     fig.tight_layout()
     fig.savefig(FIG / "e1_time_to_capacity.png", dpi=150)
 
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 3.8))
-    served = [float(r["c1_served_pct"]) for r in rows]
-    b = a1.bar(labels, served, color=colors)
-    a1.bar_label(b, [f"{v:.0f}%" for v in served])
+    _bars(a1, setups, _stats(rows, "c1_served_pct"), lambda v: f"{v:.0f}%", missing="n/a")
     a1.set_ylim(0, 110)
-    a1.set_title("E2: C1 requests served (higher is better)")
-    x = range(len(rows))
-    a2.bar([i - 0.2 for i in x], [float(r["p50_ms"]) for r in rows], 0.4, label="typical (p50)", color="#90caf9")
-    a2.bar([i + 0.2 for i in x], [float(r["p95_ms"]) for r in rows], 0.4, label="slowest (p95)", color="#1565c0")
-    a2.set_xticks(list(x), labels)
+    a1.set_title("E2: C1 requests within 0.5 s, surge (higher is better)", fontsize=9)
+    _bars(a2, setups, _stats(rows, "p95_ms"), lambda v: f"{v:.0f}", missing="n/a")
+    a2.axhline(500, ls="--", color="red", lw=1, label="target 500 ms")
     a2.set_ylabel("ms")
-    a2.set_title("E2: C1 response time (lower is better)")
-    a2.legend()
+    a2.set_title("E2: C1 p95 response time, surge (lower is better)", fontsize=9)
+    a2.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(FIG / "e2_service_quality.png", dpi=150)
     return ["e1_time_to_capacity.png", "e2_service_quality.png"]
 
 
+def e1_timeline(plt) -> list[str]:
+    """results/runs/<setup>-<run>/timeline.csv: C1 ready pods over time, one line per setup."""
+    runs = sorted((RES / "runs").glob("*/timeline.csv")) if (RES / "runs").exists() else []
+    if not runs:
+        return []
+    fig, ax = plt.subplots(figsize=(9, 4))
+    labelled = set()
+    for p in runs:
+        setup = p.parent.name.rsplit("-", 1)[0]
+        rows = list(csv.DictReader(open(p, newline="")))
+        first = setup not in labelled
+        labelled.add(setup)
+        ax.plot([float(r["t"]) for r in rows], [int(r["c1_ready"]) for r in rows],
+                color=COLORS.get(setup, "#555"), lw=1.8 if first else 0.8, alpha=1 if first else 0.5,
+                label=SHORT.get(setup, setup).replace("\n", " ") if first else None)
+    ax.axvline(90, ls=":", color="#c62828", lw=1)
+    ax.axvline(150, ls="--", color="black", lw=1)
+    ax.axvline(330, ls="--", color="#777", lw=1)
+    ax.axhline(10, ls="-", color="#bbb", lw=0.8)
+    top = ax.get_ylim()[1]
+    for x, text in ((90, "L2 warning"), (150, "surge starts"), (330, "surge ends")):
+        ax.text(x + 3, top * 0.95, text, fontsize=8, va="top")
+    ax.text(5, 10.2, "capacity for the surge (10 pods)", fontsize=8, color="#777")
+    ax.set_xlabel("s since the run started")
+    ax.set_ylabel("C1 ready pods")
+    ax.set_title("E1: C1 ready pods over time (thick line: first run of each setup)")
+    ax.legend(fontsize=8, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(FIG / "e1_timeline.png", dpi=150)
+    return ["e1_timeline.png"]
+
+
 def _mean_by(rows: list[dict], key: str, col: str) -> dict[str, float]:
     acc: dict[str, list[float]] = {}
     for r in rows:
-        acc.setdefault(r[key], []).append(float(r[col]))
+        if r.get(col, "") != "":                       # empty = never / not back within the wait
+            acc.setdefault(r[key], []).append(float(r[col]))
     return {k: sum(v) / len(v) for k, v in acc.items()}
 
 
@@ -73,8 +126,8 @@ def e3(plt) -> list[str]:
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 3.8))
     for ax, vals, title in ((a1, lost, "E3: C3/C4 work lost (s, lower is better)"),
                             (a2, back, "E3: time until everything is back (s)")):
-        b = ax.bar(order, [vals[s] for s in order], color=[COLORS.get(s, "#555") for s in order])
-        ax.bar_label(b, [f"{vals[s]:.0f}" for s in order])
+        b = ax.bar(order, [vals.get(s, 0) for s in order], color=[COLORS.get(s, "#555") for s in order])
+        ax.bar_label(b, [f"{vals[s]:.0f}" if s in vals else "not back" for s in order])
         ax.set_title(title)
     fig.tight_layout()
     fig.savefig(FIG / "e3_work_saved.png", dpi=150)
@@ -133,8 +186,9 @@ def e5(plt) -> list[str]:
 
 # experiment -> (csv it needs, who produces it, plotter)
 EXPERIMENTS = {
-    "E1/E2 time to capacity, service quality": ("e1_e2_summary.csv", "P5", e1_e2),
-    "E3 work saved": ("e3_work_saved.csv", "P3", e3),
+    "E1/E2 time to capacity, service quality": ("e1_e2_summary.csv", "scripts/run_experiment.py", e1_e2),
+    "E1 timeline": ("runs", "scripts/run_experiment.py", e1_timeline),
+    "E3 work saved": ("e3_work_saved.csv", "scripts/run_experiment.py", e3),
     "E4 alert accuracy": ("e4_alerts.csv", "scripts/export_e4.py", e4),
     "E5 crash tests": ("e5_crash.csv", "P3 + P6", e5),
 }

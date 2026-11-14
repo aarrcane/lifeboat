@@ -5,6 +5,10 @@ Scenarios written to data/:
   2. scenario_noisy.jsonl        - No crisis (flapping S1 sensor spikes to L2 at t=240, 480, 720s; S2=L0)
   3. scenario_conflicting.jsonl  - No crisis (S1=L2 at t=240s then clears; S2=L2 at t=900s while S1=L0)
   4. scenario_no_crisis.jsonl    - No crisis (passing light rain: S2=L1 at t=600s; S1=L0 throughout)
+  5. scenario_experiment.jsonl   - E1/E2/E3 runs at speed 1 (scripts/run_experiment.py): S2=L1 at
+                                   t=75s, S1+S2=L2 at t=90s repeated every 60 s until 330s, both
+                                   L0 at 330s. The Locust surge starts at t=150s, 60 s after the
+                                   L2 warning, and ends at 330s (loadtest/locustfile.py).
 """
 import json
 import os
@@ -47,11 +51,21 @@ def build_no_crisis() -> list[dict]:
     return ev
 
 
+def build_experiment() -> list[dict]:
+    ev = [{"t": 0, "source": "S1", "level": 0}, {"t": 0, "source": "S2", "level": 0},
+          {"t": 75, "source": "S2", "level": 1}]                       # heavy rain
+    for t in range(90, 330, 60):                                       # flood alert, repeated
+        ev += [{"t": t, "source": "S1", "level": 2}, {"t": t, "source": "S2", "level": 2}]
+    ev += [{"t": 330, "source": "S1", "level": 0}, {"t": 330, "source": "S2", "level": 0}]
+    return ev
+
+
 SCENARIOS = {
     "data/scenario_flash_flood.jsonl": build_flash_flood,
     "data/scenario_noisy.jsonl": build_noisy,
     "data/scenario_conflicting.jsonl": build_conflicting,
     "data/scenario_no_crisis.jsonl": build_no_crisis,
+    "data/scenario_experiment.jsonl": build_experiment,
 }
 
 

@@ -1,0 +1,13 @@
+{"t": 0, "source": "S1", "level": 0}
+{"t": 0, "source": "S2", "level": 0}
+{"t": 75, "source": "S2", "level": 1}
+{"t": 90, "source": "S1", "level": 2}
+{"t": 90, "source": "S2", "level": 2}
+{"t": 150, "source": "S1", "level": 2}
+{"t": 150, "source": "S2", "level": 2}
+{"t": 210, "source": "S1", "level": 2}
+{"t": 210, "source": "S2", "level": 2}
+{"t": 270, "source": "S1", "level": 2}
+{"t": 270, "source": "S2", "level": 2}
+{"t": 330, "source": "S1", "level": 0}
+{"t": 330, "source": "S2", "level": 0}

@@ -1,5 +1,10 @@
-"""Experiment runner for P5 baselines (B0, B1, B2, lifeboat).
-Switches cluster configuration or runs in --dry-run mode and writes CSV summary to results/.
+"""MODEL ONLY: P5's calibrated E1/E2 model for B0, B1, B2 and lifeboat (no cluster).
+
+Writes results/model/e1_e2_model.csv. These are model predictions, not measurements, and must
+be labelled that way in the report. The cluster is measured by scripts/run_experiment.py,
+which writes results/e1_e2_summary.csv.
+
+  python scripts/run_p5_baseline.py --dry-run
 """
 from __future__ import annotations
 
@@ -42,23 +47,27 @@ def write_results_csv(out_path: Path) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run P5 baseline experiments (E1, E2).")
+    ap = argparse.ArgumentParser(description="P5 E1/E2 model (prediction, not a measurement).")
     ap.add_argument("--setup", choices=list(BASELINES.keys()) + ["all"], default="all")
     ap.add_argument("--runs", type=int, default=3)
-    ap.add_argument("--dry-run", action="store_true", help="Print kubectl commands and write calibrated CSV without a cluster")
-    ap.add_argument("--out", default=str(ROOT / "results" / "e1_e2_summary.csv"))
+    ap.add_argument("--dry-run", action="store_true",
+                    help="Print the setup commands and write the model CSV (the only mode)")
+    ap.add_argument("--out", default=str(ROOT / "results" / "model" / "e1_e2_model.csv"))
     args = ap.parse_args()
+    if not args.dry_run:
+        sys.exit("This script is the model only and never touches the cluster. Use --dry-run, or\n"
+                 "measure the cluster with: python3 scripts/run_experiment.py --setup all --runs 3")
 
     codes = list(BASELINES.keys()) if args.setup == "all" else [args.setup]
     for code in codes:
-        print(f"[{code}] {BASELINES[code].name} (runs={args.runs})")
-        apply_cluster_baseline(code, dry_run=args.dry_run)
+        print(f"[{code}] {BASELINES[code].name} (model prediction)")
+        apply_cluster_baseline(code, dry_run=True)
         res = evaluate_setup(code)
         print(f"  -> E1={res.e1_time_to_capacity_s}s | C1 served={res.c1_served_pct}% | p50={res.p50_ms}ms | p95={res.p95_ms}ms")
 
     out_path = Path(args.out)
     write_results_csv(out_path)
-    print(f"Saved summary CSV to {out_path}")
+    print(f"Saved MODEL predictions to {out_path} (not measured)")
 
 
 if __name__ == "__main__":

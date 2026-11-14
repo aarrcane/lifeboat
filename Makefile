@@ -4,12 +4,14 @@ CLUSTER  ?= lifeboat
 SPEED    ?= 10
 SCENARIO ?= data/scenario_flash_flood.jsonl
 STAGES   ?= 150:10,330:200,360:10
+SETUP    ?= all
+RUNS     ?= 3
 S3_MODE  ?= $(shell grep -s '^S3_MODE=' .env | cut -d= -f2)
 PLATFORM ?= linux/amd64
 export CLUSTER
 
 .PHONY: help test itest images cluster cluster-down import k3s-import secrets deploy feeds feeds-off workloads wait \
-        monitoring restart replay load demo reset status undeploy scenario lint
+        monitoring restart replay load demo reset status undeploy scenario lint experiment
 
 help:   ## list targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t 16
@@ -102,8 +104,11 @@ status: ## one-screen view of the cluster and Lifeboat
 	@echo; kubectl -n lifeboat get pods,lease,triageplans
 	@echo; kubectl -n lifeboat-demo get deploy,jobs,pods
 
-scenario:
+scenario: ## regenerate the replay scenarios in data/
 	python scripts/make_scenario.py
+
+experiment: ## measure E1/E2/E3 for SETUP (B0 B1 B2 lifeboat or all) x RUNS on the cluster
+	python3 scripts/run_experiment.py --setup $(SETUP) --runs $(RUNS)
 
 undeploy: feeds-off ## remove Lifeboat and the demo workloads (keeps the cluster and monitoring)
 	kubectl -n lifeboat delete job replay locust --ignore-not-found

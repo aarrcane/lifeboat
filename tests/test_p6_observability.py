@@ -198,9 +198,19 @@ def test_every_plotter_runs_on_sample_csvs(tmp_path, monkeypatch):
     sys.path.insert(0, str(ROOT / "scripts"))
     import plot_results as pr
     (tmp_path / "figures").mkdir()
-    (tmp_path / "e1_e2_summary.csv").write_text((ROOT / "results/e1_e2_summary.csv").read_text())
+    (tmp_path / "e1_e2_summary.csv").write_text(
+        "setup,run,e1_surge_to_capacity_s,alert_to_ready_s,c1_ready_at_surge,c1_served_pct,p50_ms,p95_ms,"
+        "c2_served_pct\nB0,1,95,,2,41.0,480,2100,90.0\nB0,2,,,2,38.5,510,2300,88.0\n"
+        "B2,1,40,25,4,80.0,60,900,85.0\nlifeboat,1,-45,12,7,97.5,30,320,70.0\n")
     (tmp_path / "e3_work_saved.csv").write_text(
-        "setup,run,workload,progress_lost_s,restore_s\nB0,1,c3-analytics,120,90\nlifeboat,1,c3-analytics,10,60\n")
+        "setup,run,workload,progress_lost_s,restore_s\nB0,1,c3-analytics,120,90\nB0,1,c4-backup,30,\n"
+        "lifeboat,1,c3-analytics,10,60\n")
+    run = tmp_path / "runs" / "lifeboat-1"
+    run.mkdir(parents=True)
+    (run / "timeline.csv").write_text(
+        "t,c1_ready,c1_spec,level,plan_steps,c3_suspend,c3_active,c4_suspend,c4_active,placeholder_ready\n"
+        + "".join(f"{t},{2 if t < 95 else 7},{7 if t >= 90 else 2},{2 if t >= 90 else 0},3,1,0,1,0,0\n"
+                  for t in range(0, 400, 5)))
     import export_e4
     with open(tmp_path / "e4_alerts.csv", "w") as fh:
         fh.write(",".join(export_e4.FIELDS) + "\n")
@@ -208,7 +218,8 @@ def test_every_plotter_runs_on_sample_csvs(tmp_path, monkeypatch):
             fh.write(",".join(str(r[f]) for f in export_e4.FIELDS) + "\n")
     (tmp_path / "e5_crash.csv").write_text(
         "test,run,takeover_s,steps_total,steps_left_half_done,steps_mismatched,takeover_increment,"
-        "lifeboat_cpu_m,lifeboat_mem_mi\nkill-active,1,17.5,4,0,0,1,12,45\n")
+        "level_before,level_after,steps_before,steps_after,plan_kept,"
+        "lifeboat_cpu_m,lifeboat_mem_mi\nkill-active,1,17.5,4,0,0,1,2,2,4,4,1,12,45\n")
     monkeypatch.setattr(pr, "RES", tmp_path)
     monkeypatch.setattr(pr, "FIG", tmp_path / "figures")
     for _exp, (_csv, _owner, fn) in pr.EXPERIMENTS.items():
