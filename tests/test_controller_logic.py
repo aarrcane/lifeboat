@@ -9,7 +9,7 @@ from lifeboat import controller as ctl
 from lifeboat import ingest
 from lifeboat.config import Config
 from lifeboat.executor import Executor
-from lifeboat.forecast import Holt, TrafficForecaster
+from lifeboat.forecast import TrafficForecaster
 from lifeboat.models import Level, Reading, Step, step_key
 from lifeboat.plan_store import InMemoryPlanStore
 from lifeboat.signing import sign
@@ -30,7 +30,8 @@ def make_replica(store, cluster, elector, calm_s=300.0) -> ctl.Lifeboat:
     lb.book = ingest.ReadingBook()
     lb.voter = Voter(SECRET, calm_s, lb.cfg.vote_window_s)
     lb.traffic = TrafficForecaster(0.3, 0.3, 12, 2.0, 4.0, 8)
-    lb.c1_holt = Holt(0.3, 0.3)
+    lb.c1_traffic = TrafficForecaster(0.3, 0.3, 12, 2.0, 4.0, 8)
+    lb._last_c1_rps = None
     lb.store = store
     lb.executor = Executor(store, FakeActions(cluster), elector)
     lb._last_sample = 0.0

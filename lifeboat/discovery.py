@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+import time
+from datetime import datetime, timezone
+from typing import Optional
 
 from kubernetes import client
 
@@ -101,13 +104,28 @@ def free_millis() -> float:
     return float(alloc - used)
 
 
-def is_unschedulable(pod) -> bool:
-    """Stuck waiting for room: PodScheduled=False/Unschedulable. Plain phase=Pending would also
-    count pods that are only pulling images or starting, so every C1 scale-up by Lifeboat
-    itself would look like C1 struggling and trip L3."""
+def _age_s(ts, now: float) -> Optional[float]:
+    if ts is None:
+        return None
+    if isinstance(ts, str):
+        ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    if isinstance(ts, datetime):
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return now - ts.timestamp()
+    return now - float(ts)
+
+
+def is_unschedulable(pod, min_age_s: float = 0.0, now: Optional[float] = None) -> bool:
+    """Stuck waiting for room: PodScheduled=False/Unschedulable for at least `min_age_s`.
+    Plain phase=Pending would also count pods that are only pulling images or starting, so every
+    C1 scale-up by Lifeboat itself would look like C1 struggling and trip L3. The grace covers
+    new C1 pods that wait a few seconds while the pods paused for them terminate."""
+    now = time.time() if now is None else now
     for c in (pod.status.conditions or []) if pod.status else []:
         if c.type == "PodScheduled" and c.status == "False" and c.reason == "Unschedulable":
-            return True
+            age = _age_s(getattr(c, "last_transition_time", None), now)
+            return age is None or age >= min_age_s          # no timestamp: cannot tell, count it
     return False
 
 
@@ -115,4 +133,5 @@ def c1_unschedulable_pods(cfg: Config) -> int:
     core = client.CoreV1Api()
     pods = core.list_namespaced_pod(cfg.workload_namespace, label_selector=f"{TIER_LABEL}=C1",
                                     field_selector="status.phase=Pending").items
-    return sum(1 for p in pods if is_unschedulable(p))
+    now = time.time()
+    return sum(1 for p in pods if is_unschedulable(p, cfg.c1_stuck_grace_s, now))

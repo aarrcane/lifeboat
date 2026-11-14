@@ -12,7 +12,7 @@ import time
 from typing import Optional
 
 from .config import Config
-from .models import Level, Step, Tier, Workload, step_key
+from .models import Level, PlanRecord, Step, Tier, Workload, step_key
 
 
 def _score(w: Workload, now: float) -> float:
@@ -30,11 +30,39 @@ def _pause(w: Workload) -> Step:
                 {"replicas": 0, "delta_millis": w.millis, "checkpoint": True})
 
 
+def c1_sizing_rps(level: Level, predicted: float, observed: Optional[float],
+                  baseline: float, cfg: Config) -> float:
+    """C1 traffic (req/s) to size for. Holt extrapolates a step surge far past its peak (339 req/s
+    predicted for a true 120), so the forecast is only trusted within a band around what we
+    observe. At L2 two sources agree on a crisis: size for a surge before traffic moves."""
+    size = predicted
+    if observed is not None:
+        size = max(observed, min(predicted, cfg.forecast_headroom * observed))
+    if level >= Level.L2:
+        size = max(size, cfg.l2_presize_factor * baseline)
+    return size
+
+
+def c1_floor_from_plan(rec: Optional[PlanRecord], workloads: list[Workload]) -> dict[str, int]:
+    """Replicas of the C1 scale steps in the current plan (the planner's ratchet)."""
+    if not rec:
+        return {}
+    c1 = {(w.namespace, w.name) for w in workloads if w.tier == Tier.C1}
+    return {s.name: int(s.params["replicas"]) for s in rec.steps.values()
+            if s.action == "scale_deployment" and (s.namespace, s.name) in c1
+            and s.params.get("replicas") is not None}
+
+
 def make_plan(level: Level, workloads: list[Workload], c1_rps_forecast: float,
               baseline_free_millis: float, cfg: Config,
-              now: Optional[float] = None) -> list[Step]:
+              now: Optional[float] = None,
+              c1_floor: Optional[dict[str, int]] = None) -> list[Step]:
+    """`c1_rps_forecast` is the C1 traffic to size for (see c1_sizing_rps). `c1_floor` holds the
+    replicas of the C1 steps in the current plan: C1 never shrinks while a plan exists, only
+    when the plan is emptied at L0."""
     level = Level(level)
     now = now if now is not None else time.time()
+    c1_floor = c1_floor or {}
     if level == Level.L0:
         return []
 
@@ -42,7 +70,7 @@ def make_plan(level: Level, workloads: list[Workload], c1_rps_forecast: float,
     c1, c3, c4, ph = by(Tier.C1), by(Tier.C3), by(Tier.C4), by(Tier.PLACEHOLDER)
     steps: list[Step] = []
 
-    # ---- C1 targets (sizing from forecast at L2+, a few early pods at L1)
+    # ---- C1 targets: sized from the traffic at every level from L1 up, at least a few extra pods
     c1_total = sum(w.millis for w in c1)
     needed = c1_rps_forecast * cfg.cost_millis_per_rps + cfg.margin_millis
     extra_pods = {Level.L1: cfg.l1_extra_c1_pods, Level.L2: cfg.l1_extra_c1_pods,
@@ -52,10 +80,11 @@ def make_plan(level: Level, workloads: list[Workload], c1_rps_forecast: float,
         if w.kind != "Deployment":
             continue
         target = w.replicas + extra_pods
-        if level >= Level.L2 and c1_total > 0:
+        if c1_total > 0:
             share = needed * (w.millis / c1_total)
             target = max(target, math.ceil(share / max(w.pod_millis, 1)))
         target = min(target, cfg.c1_max_replicas)
+        target = max(target, c1_floor.get(w.name, 0))           # ratchet: no shrinking mid-crisis
         if target > w.replicas:
             c1_scale.append(Step(step_key("scale_deployment", w.namespace, w.name),
                                  "scale_deployment", w.namespace, w.name,

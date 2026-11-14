@@ -85,3 +85,13 @@ def test_checkpoint_store_failure_means_no_checkpoint_known(fake_api):
     ws = discovery.list_workloads(Config(), _CP(fail=True))
     assert ws[0].last_checkpoint_ts is None
     assert discovery.list_workloads(Config(), _CP())[0].last_checkpoint_ts == 123.0
+
+
+def test_unschedulable_only_counts_after_grace():
+    from datetime import datetime, timezone
+    t0 = datetime(2026, 11, 14, tzinfo=timezone.utc)
+    p = NS(status=NS(conditions=[NS(type="PodScheduled", status="False", reason="Unschedulable",
+                                    last_transition_time=t0)]))
+    assert not is_unschedulable(p, 20, now=t0.timestamp() + 5)    # waiting for paused pods to go
+    assert is_unschedulable(p, 20, now=t0.timestamp() + 30)
+    assert is_unschedulable(p, now=t0.timestamp() + 5)            # no grace asked: stuck at once

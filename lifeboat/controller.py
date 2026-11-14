@@ -11,12 +11,12 @@ from prometheus_client import start_http_server
 from . import checkpoint, discovery, ingest, metrics
 from .config import Config
 from .executor import Executor
-from .forecast import Holt, TrafficForecaster
+from .forecast import TrafficForecaster
 from .k8s_actions import K8sActions
 from .k8s_plan_store import K8sPlanStore
 from .lease import LeaseElector
 from .models import Level, Reading
-from .planner import make_plan
+from .planner import c1_floor_from_plan, c1_sizing_rps, make_plan
 from .signing import sign
 from .voter import Voter
 
@@ -36,7 +36,10 @@ class Lifeboat:
         self.voter = Voter(cfg.hmac_secret, cfg.calm_minutes * 60, cfg.vote_window_s)
         self.traffic = TrafficForecaster(cfg.holt_alpha, cfg.holt_beta, cfg.forecast_horizon_steps,
                                          cfg.x_factor, cfg.y_factor, cfg.forecast_warmup_samples)
-        self.c1_holt = Holt(cfg.holt_alpha, cfg.holt_beta)
+        # C1 traffic: prediction plus a baseline of normal C1 traffic (for the L2 pre-size rule)
+        self.c1_traffic = TrafficForecaster(cfg.holt_alpha, cfg.holt_beta, cfg.forecast_horizon_steps,
+                                            cfg.x_factor, cfg.y_factor, cfg.forecast_warmup_samples)
+        self._last_c1_rps: float | None = None
         self.store = K8sPlanStore(cfg.system_namespace, cfg.plan_name)
         self.executor = Executor(
             self.store, K8sActions(cfg, self.cp),
@@ -79,7 +82,8 @@ class Lifeboat:
             if rps is not None:                                        # no data => skip, don't learn 0
                 self.traffic.observe(rps)
             if c1 is not None:
-                self.c1_holt.update(c1)
+                self.c1_traffic.observe(c1)
+                self._last_c1_rps = c1
             self.book.add(sign(Reading("S3", int(self.traffic.level()), now,
                                        now + cfg.forecast_ttl_s), cfg.hmac_secret))
             metrics.FORECAST_RATIO.set(self.traffic.ratio())
@@ -94,8 +98,10 @@ class Lifeboat:
         discovery.apply_originals(workloads, rec)                      # pre-triage view
         applied = sum(s.params.get("delta_millis", 0) for s in (rec.steps.values() if rec else []) if s.done)
         baseline_free = discovery.free_millis() - applied
-        c1_forecast = self.c1_holt.forecast(cfg.forecast_horizon_steps)
-        desired = make_plan(level, workloads, c1_forecast, baseline_free, cfg, now)
+        c1_rps = c1_sizing_rps(level, self.c1_traffic.predicted(), self._last_c1_rps,
+                               self.c1_traffic.baseline, cfg)
+        desired = make_plan(level, workloads, c1_rps, baseline_free, cfg, now,
+                            c1_floor=c1_floor_from_plan(rec, workloads))
 
         self.executor.tick(int(level), desired)
         self._export(level, struggling, readings, now)

@@ -170,8 +170,8 @@ evidence. Requiring two of them for L2 means a forecast error alone can only add
 pod (L1), never pause batch work.
 
 **C1 struggling (L3).** `lifeboat/monitor.py` reports C1 as struggling if its p95 response time
-exceeds 0.5 s, or if C1 pods are *Unschedulable* (not merely Pending, so Lifeboat's own scale-up
-does not trigger L3).
+exceeds 0.5 s, or if C1 pods have been *Unschedulable* for more than 20 s (not merely Pending,
+and not while paused pods are still terminating, so Lifeboat's own scale-up does not trigger L3).
 
 **Failing safe.** If Prometheus is unreachable, queries return "no data": the forecaster skips
 the sample and C1-struggling stays false, so an outage never causes a false L3. PUB and NEA
@@ -188,9 +188,14 @@ dashboard as annotations for the demo video.
 
 Algorithm 2 (`lifeboat/planner.py`) turns a level into steps:
 
-- **L1:** pause C4 backups (an overdue backup keeps running) and add one C1 pod early.
-- **L2:** remove the placeholder pods and size C1 from the forecast: needed CPU = forecast C1
-  RPS × 20 mCPU per request/s + 500 mCPU margin. If that still doesn't fit, pause batch work
+- **C1 sizing (L1 and up):** needed CPU = C1 RPS to size for × 20 mCPU per request/s + 500 mCPU
+  margin, and at least one extra pod. The RPS to size for is the C1 forecast, clamped to between
+  the observed C1 RPS and 1.25 × observed (Holt overshoots a step surge); at L2 and above it is
+  at least 10 × normal C1 traffic (`l2_presize_factor`, a policy knob), so C1 grows before
+  traffic moves. C1 never shrinks while a plan exists; it returns to its original size only
+  when the plan is emptied at L0.
+- **L1:** pause C4 backups (an overdue backup keeps running).
+- **L2:** remove the placeholder pods. If C1's target still doesn't fit, pause batch work
   (overdue C4 first, then C3) in order of room freed ÷ (work since last checkpoint + restart
   time + 1), until the shortfall is covered.
 - **L3:** pause everything pausable, add three C1 pods, and switch off C2's extra features

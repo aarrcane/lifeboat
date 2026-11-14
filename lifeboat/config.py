@@ -59,6 +59,9 @@ class Config:
     l1_extra_c1_pods: int = 1
     l3_extra_c1_pods: int = 3
     c1_max_replicas: int = 20
+    forecast_headroom: float = 1.25      # size C1 for at most 25 % above the C1 traffic we observe
+    l2_presize_factor: float = 10.0      # policy knob: at L2 size C1 for this x normal C1 traffic
+    c1_stuck_grace_s: float = 20.0       # a C1 pod must be unschedulable this long to count as stuck
 
     # --- executor / loop
     tick_s: float = 5.0

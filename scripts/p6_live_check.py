@@ -45,11 +45,11 @@ import dataclasses  # noqa: E402
 from lifeboat import discovery, ingest, metrics  # noqa: E402
 from lifeboat.config import Config  # noqa: E402
 from lifeboat.executor import Executor  # noqa: E402
-from lifeboat.forecast import Holt, TrafficForecaster  # noqa: E402
+from lifeboat.forecast import TrafficForecaster  # noqa: E402
 from lifeboat.models import Level, Reading, Tier, Workload  # noqa: E402
 from lifeboat.monitor import Monitor  # noqa: E402
 from lifeboat.plan_store import InMemoryPlanStore  # noqa: E402
-from lifeboat.planner import make_plan  # noqa: E402
+from lifeboat.planner import c1_floor_from_plan, c1_sizing_rps, make_plan  # noqa: E402
 from lifeboat.signing import sign  # noqa: E402
 from lifeboat.voter import Voter  # noqa: E402
 from make_dashboard import PANELS  # noqa: E402
@@ -141,7 +141,9 @@ def lifeboat_loop(stop: threading.Event, t0: float, cfg: Config, args, log_rows:
     mon = Monitor(cfg)
     traffic = TrafficForecaster(cfg.holt_alpha, cfg.holt_beta, cfg.forecast_horizon_steps,
                                 cfg.x_factor, cfg.y_factor, cfg.forecast_warmup_samples)
-    c1_holt = Holt(cfg.holt_alpha, cfg.holt_beta)
+    c1_traffic = TrafficForecaster(cfg.holt_alpha, cfg.holt_beta, cfg.forecast_horizon_steps,
+                                   cfg.x_factor, cfg.y_factor, cfg.forecast_warmup_samples)
+    last_c1 = None
     voter = Voter(cfg.hmac_secret, cfg.calm_minutes * 60, cfg.vote_window_s)
     lease = FakeLease()
     lease.holder, lease.transitions = "lifeboat-local-0", 1
@@ -171,13 +173,16 @@ def lifeboat_loop(stop: threading.Event, t0: float, cfg: Config, args, log_rows:
         if rps is not None:
             traffic.observe(rps)
         if c1 is not None:
-            c1_holt.update(c1)
+            c1_traffic.observe(c1)
+            last_c1 = c1
         rps = rps or 0.0
         book.add(sign(Reading("S3", int(traffic.level()), now, now + cfg.forecast_ttl_s), cfg.hmac_secret))
         struggling = mon.c1_struggling()
         readings = book.snapshot()
         level = voter.evaluate(readings, now, struggling)
-        desired = make_plan(level, workloads, c1_holt.forecast(cfg.forecast_horizon_steps), 500.0, cfg, now)
+        prev = executor.store.get()
+        c1_rps = c1_sizing_rps(level, c1_traffic.predicted(), last_c1, c1_traffic.baseline, cfg)
+        desired = make_plan(level, workloads, c1_rps, 500.0, cfg, now, c1_floor=c1_floor_from_plan(prev, workloads))
         executor.tick(int(level), desired)
         rec = executor.store.get()
         metrics.LEVEL.set(int(level))
