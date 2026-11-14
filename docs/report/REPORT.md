@@ -231,7 +231,51 @@ go to MinIO on laptops and Amazon S3 on AWS. TODO (P3).
 | Monitoring | kube-prometheus-stack (Prometheus + Grafana), PodMonitors, alert rules |
 | CI | unit tests, yamllint, kubeconform, real k3s API integration test (`make itest`) |
 
-TODO (P4): AWS instance types, cost, one-command deploy, secrets handling.
+**Cluster on AWS.** The evaluation cluster runs in an AWS Academy Learner Lab in `us-east-1`:
+three `t3.large` instances (2 vCPU, 8 GiB, 30 GB gp3 disk each) on Ubuntu 24.04 with k3s
+v1.31.4+k3s1. All three are k3s servers with embedded etcd [18], so the control plane keeps a
+quorum and keeps working with one server down; Lifeboat's own Lease and TriagePlan live in that
+etcd. Server-1 has an Elastic IP, so the Kubernetes API address and the kubeconfig stay the same
+when the lab stops and starts the machines (the other two get new public IPs, which
+`scripts/aws/refresh.sh` picks up). The price is about US$0.26 per hour while the three run
+**[pending: total from the Learner Lab page]**; between sessions the servers are stopped, not
+deleted (`scripts/aws/stop.sh`, `start.sh`).
+
+**One command per layer.** `scripts/aws/up.sh` builds the whole AWS side: it looks up the Ubuntu
+AMI, creates the security group, the Elastic IP and the S3 checkpoint bucket, starts server-1
+with `--cluster-init`, joins the other two servers and writes `kubeconfig-aws.yaml`.
+`make up` then installs everything on the cluster (images, Lifeboat, Prometheus and Grafana, the
+demo workloads) and waits until it is running; on a laptop the same `make up` first creates a
+three-server k3d cluster. `scripts/aws/down.sh` deletes every AWS resource `up.sh` made, and
+`scripts/aws/evidence.sh` saves the nodes, versions, pods, encryption status, EC2 instances,
+S3 objects and Helm releases into `results/aws_evidence/`.
+
+**Network and identity.** The security group lets the nodes talk freely to each other and opens
+SSH (22), the Kubernetes API (6443) and the NodePort range only to the operator's own IP
+(`ALLOW_CIDR`). The Learner Lab does not allow IAM users, so nothing in the cluster holds an AWS
+access key: the instances run with `LabInstanceProfile`, and the checkpoint code reaches S3
+through the instance metadata service. IMDSv2 is required (session tokens only) with a hop limit
+of 2, which is what lets a pod, one network hop further than the host, use the profile.
+On laptops the same checkpoint code talks to MinIO instead.
+
+**Secrets.** `make secrets` generates the HMAC key for signed readings and the store credentials
+into a local `.env` (never committed), and creates the `lifeboat-secrets` and `lifeboat-s3`
+Secrets from it. Every k3s server runs with `--secrets-encryption`, so Secrets are encrypted in
+etcd; CI checks that the API server starts with the encryption config.
+
+**Images and CI.** The three images (controller, web app, worker) are built once and imported
+onto every node over SSH (`make import`), so the cluster needs no registry; the cost is that
+everything is tagged `latest`, and a restart is needed to pick up a new build. Every push runs
+four CI jobs: unit tests; yamllint, kubeconform (strict, Kubernetes 1.31 schemas) and shellcheck;
+a real k3s API server that applies every manifest as `make deploy workloads` does and runs
+`make itest` as Lifeboat's own ServiceAccount (Lease, TriagePlan, takeover, revert, RBAC); and an
+image build with a smoke test of each image.
+
+**Limits.** Operator traffic goes through server-1's address, so losing server-1 leaves the
+cluster running but needs a kubeconfig edit to reach it. All pods on a node share the lab role,
+so a compromised pod could use S3. The control plane, Lifeboat and the workloads share the same
+three machines, which is realistic for a small edge cluster but means a heavy surge also loads
+etcd.
 
 **Running the feeds: platforms considered.** The two feeds are tiny scheduled functions (one HTTP
 call every 2 or 5 minutes, Section 4.1), and the cluster they run on is the one Lifeboat is trying
