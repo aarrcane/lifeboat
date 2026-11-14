@@ -22,7 +22,7 @@ itest:  ## cluster check: Lease, TriagePlan, takeover, revert, RBAC (needs `make
 
 lint:   ## same manifest/script checks as CI (needs yamllint, kubeconform, shellcheck)
 	yamllint -c .yamllint deploy .github
-	kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds
+	kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds deploy/baselines
 	shellcheck scripts/*.sh scripts/*/*.sh
 
 images: ## build the three images (the live feeds run from the controller image)

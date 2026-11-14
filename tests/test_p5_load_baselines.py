@@ -96,6 +96,16 @@ def test_baselines_b0_b1_b2_lifeboat_defined():
     assert BASELINES["B1"].placeholder_replicas == 2
     assert BASELINES["B2"].controller_replicas == 2 and BASELINES["B2"].early_warning is False
     assert BASELINES["lifeboat"].controller_replicas == 2 and BASELINES["lifeboat"].early_warning is True
+    # the HPA only where Lifeboat is off: two controllers writing C1's replicas would fight
+    for code, spec in BASELINES.items():
+        assert spec.hpa == (spec.controller_replicas == 0), code
+
+
+def test_hpa_manifest_for_b0_b1():
+    text = (ROOT / "deploy" / "baselines" / "hpa-c1.yaml").read_text(encoding="utf-8")
+    for needle in ("kind: HorizontalPodAutoscaler", "name: c1-emergency", "minReplicas: 2",
+                   "maxReplicas: 20", "averageUtilization: 70", "stabilizationWindowSeconds: 60"):
+        assert needle in text
 
 
 def test_e1_lifeboat_under_30s_and_beats_all_baselines():

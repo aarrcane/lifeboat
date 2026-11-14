@@ -37,9 +37,12 @@ make reset                                               # clean L0 before the n
 In the cluster, checkpoints go to S3: MinIO on laptops (`deploy/05-checkpoint-store.yaml`), a real bucket on AWS (`S3_MODE=aws` in `.env`). Secrets come from your local `.env` (`make secrets`), never from git. The `file` backend is only for unit tests and running the worker on your laptop, since pods don't share `/tmp`.
 
 ## Baselines
-- **B0** pod priority only: apply `deploy/01-priorityclasses.yaml` + `04-demo-workloads.yaml`, do not deploy Lifeboat.
-- **B1** spare room: B0 + the `placeholder` Deployment (already in `04`).
-- **B2** reactive Lifeboat: `LIFEBOAT_EARLY_WARNING=false` (ignores S1-S3, only the measured L3 path fires).
+All four setups run on the same workloads, load and replayed warnings, with the same cool-down
+(HPA scale-down window 60 s, `LIFEBOAT_CALM_MINUTES=1`). `scripts/run_experiment.py` sets them up.
+- **B0** HPA + pod priority: `deploy/01-priorityclasses.yaml`, `04-demo-workloads.yaml` and the C1 autoscaler `deploy/baselines/hpa-c1.yaml` (CPU 70 %, 2-20 pods); Lifeboat scaled to 0, placeholders 0.
+- **B1** HPA + pod priority + spare room: B0 + 2 `placeholder` pods (already in `04`).
+- **B2** Lifeboat reacting only to measured distress: `LIFEBOAT_EARLY_WARNING=false` (ignores S1-S3, only the measured L3 path fires), no HPA.
+- **lifeboat** full Lifeboat, no HPA. The HPA must never run next to Lifeboat: two controllers writing C1's replicas fight.
 
 ## Status / known gaps (be honest in the report)
 - Unit-tested: voter, planner, executor crash/takeover, forecast, checkpoint, feed parsers.

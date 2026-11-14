@@ -19,7 +19,7 @@ jobs:
       - name: kubeconform (Kubernetes schema, strict)
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
-          ./kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds
+          ./kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds deploy/baselines
       - name: shellcheck
         run: shellcheck scripts/*.sh scripts/*/*.sh
 

@@ -267,8 +267,11 @@ therefore stops the live feeds first.
 
 All experiments replay the same scripted Singapore flash flood (`data/scenario_flash_flood.jsonl`)
 while Locust sends a ~20× traffic surge at C1 and C2 and C3/C4 jobs run. Baselines on the same
-workloads: **B0** pod priority only, **B1** B0 + spare room (placeholder pods), **B2** Lifeboat
-with early warnings off (reacts only, roughly like Kueue/Phoenix). Each setup runs 3 times
+workloads: **B0** a HorizontalPodAutoscaler on C1 (CPU 70 %, 2 to 20 pods) plus pod priority, which
+is what Kubernetes gives you out of the box; **B1** B0 + spare room (placeholder pods); **B2**
+Lifeboat reacting only to measured distress (early warnings off). The HPA is not deployed next to
+Lifeboat, since two controllers writing C1's replicas would fight. All four setups share the same
+cool-down: HPA scale-down window 60 s, `LIFEBOAT_CALM_MINUTES=1`. Each setup runs 3 times
 **[pending: AWS EC2]**. Figures are produced by `scripts/plot_results.py` from the CSVs in
 `results/` (formats in `docs/RESULTS_FORMAT.md`).
 

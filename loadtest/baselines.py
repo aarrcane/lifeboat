@@ -31,29 +31,35 @@ class BaselineSpec:
     controller_replicas: int
     early_warning: bool
     placeholder_replicas: int
-    reaction_delay_s: float  # delay after surge start before capacity is freed & C1 scaled
+    reaction_delay_s: float  # MODEL ONLY: delay after surge start before capacity is freed & C1 scaled
+    hpa: bool = False        # deploy/baselines/hpa-c1.yaml applied (never together with Lifeboat)
 
 
+HPA_MANIFEST = "deploy/baselines/hpa-c1.yaml"
+
+# All four setups share the same cool-down: HPA scale-down window 60 s, LIFEBOAT_CALM_MINUTES=1.
 BASELINES: Dict[str, BaselineSpec] = {
     "B0": BaselineSpec(
         code="B0",
-        name="Plain pod priority",
+        name="HPA + pod priority",
         controller_replicas=0,
         early_warning=False,
         placeholder_replicas=0,
-        reaction_delay_s=52.0,  # waits for pending C1 pod + kubelet preemption + C3/C4 grace period
+        reaction_delay_s=52.0,  # HPA reacts to saturated CPU + pending C1 pod + preemption grace period
+        hpa=True,
     ),
     "B1": BaselineSpec(
         code="B1",
-        name="Autoscaling + spare room",
+        name="HPA + pod priority + spare room",
         controller_replicas=0,
         early_warning=False,
         placeholder_replicas=2,
         reaction_delay_s=34.0,  # HPA window + placeholder eviction gives partial headroom faster
+        hpa=True,
     ),
     "B2": BaselineSpec(
         code="B2",
-        name="Lifeboat, warnings off",
+        name="Lifeboat, measured distress only",
         controller_replicas=2,
         early_warning=False,
         placeholder_replicas=2,

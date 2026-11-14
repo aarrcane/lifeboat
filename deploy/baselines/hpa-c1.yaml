@@ -1,0 +1,16 @@
+# Baselines B0 and B1 only: what Kubernetes gives you out of the box, a CPU autoscaler for C1
+# (k3s ships metrics-server). Never apply it together with Lifeboat (setups B2 and lifeboat):
+# two controllers writing C1's replicas would fight. scripts/run_experiment.py applies and
+# deletes it per setup.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: c1-emergency, namespace: lifeboat-demo, labels: {app: lifeboat-baseline}}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: c1-emergency}
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 60}   # same cool-down as LIFEBOAT_CALM_MINUTES=1
