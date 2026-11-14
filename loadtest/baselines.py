@@ -11,7 +11,9 @@ from lifeboat.models import Level, Tier, Workload
 from lifeboat.planner import make_plan
 
 
-SURGE_STAGES: tuple[tuple[int, int], ...] = ((120, 10), (180, 200), (480, 200), (600, 10))
+# Same as DEFAULT_STAGES in loadtest/locustfile.py: 2.5 min normal, 3 min 20x surge, 30 s cool-down.
+SURGE_STAGES: tuple[tuple[int, int], ...] = ((150, 10), (330, 200), (360, 10))
+SURGE_START_S, SURGE_END_S = 150, 330
 
 
 def surge_target_at(run_time_s: float) -> tuple[int, int] | None:

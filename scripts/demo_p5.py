@@ -28,7 +28,7 @@ def demo_part1_baselines() -> None:
         f"CPU calibration : BURN_MS={cal.burn_ms:.0f} ms CPU/request | {cal.pod_cpu_millis}m CPU limit/pod -> "
         f"{cal.max_rps_per_pod:.1f} RPS/pod ({cal.cost_millis_per_rps:.0f} mCPU/RPS)"
     )
-    print(f"Locust stages   : {list(SURGE_STAGES)}  (10 -> 200 users = 20x surge for 5 min)\n")
+    print(f"Locust stages   : {list(SURGE_STAGES)}  (10 -> 200 users = 20x surge for 3 min)\n")
 
     print(f"{'Setup':<26} {'C1 pods':>7} {'E1 (s)':>8} {'C1 served':>11} {'p50 (ms)':>10} {'p95 (ms)':>10}")
     print("-" * 78)

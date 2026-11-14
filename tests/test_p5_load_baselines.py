@@ -36,18 +36,22 @@ def _load_webapp_with(tier: str, burn_ms: float, features_file: str):
     return _WEBAPP_MOD
 
 
-def test_surge_shape_20x_ramp_and_stop():
-    # 0-120s: 10 users (normal)
-    assert SURGE_STAGES[0] == (120, 10)
+def test_surge_shape_20x_and_stop():
+    # 0-150 s: 10 users (normal), 150-330 s: 200 users (20x surge), 330-360 s: cool-down
+    assert SURGE_STAGES == ((150, 10), (330, 200), (360, 10))
     assert surge_target_at(30) == (10, 50)
-    # 120-480s: 200 users (20x surge)
-    assert SURGE_STAGES[1] == (180, 200)
-    assert SURGE_STAGES[2] == (480, 200)
     assert surge_target_at(240) == (200, 50)
-    # 480-600s: back to 10 users, stops at 600s
-    assert SURGE_STAGES[3] == (600, 10)
-    assert surge_target_at(500) == (10, 50)
-    assert surge_target_at(601) is None
+    assert surge_target_at(340) == (10, 50)
+    assert surge_target_at(361) is None
+
+
+def test_locustfile_default_stages_match_baselines():
+    import re
+    text = (ROOT / "loadtest" / "locustfile.py").read_text(encoding="utf-8")
+    default = re.search(r'DEFAULT_STAGES = "([^"]+)"', text).group(1)
+    assert tuple(tuple(int(x) for x in p.split(":")) for p in default.split(",")) == SURGE_STAGES
+    mk = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert f"STAGES   ?= {default}" in mk
 
 
 def test_cpu_calibration_matches_planner_config():

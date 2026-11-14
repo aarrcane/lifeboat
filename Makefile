@@ -3,6 +3,7 @@
 CLUSTER  ?= lifeboat
 SPEED    ?= 10
 SCENARIO ?= data/scenario_flash_flood.jsonl
+STAGES   ?= 150:10,330:200,360:10
 S3_MODE  ?= $(shell grep -s '^S3_MODE=' .env | cut -d= -f2)
 PLATFORM ?= linux/amd64
 export CLUSTER
@@ -81,10 +82,10 @@ replay: feeds-off ## replay SCENARIO at SPEED x from inside the cluster (stops l
 	kubectl -n lifeboat delete job replay --ignore-not-found --wait=true
 	sed -e 's|__SPEED__|$(SPEED)|' -e 's|__SCENARIO__|$(SCENARIO)|' deploy/jobs/replay.yaml | kubectl create -f -
 
-load: ## start the 20x Locust surge from inside the cluster (10 min)
+load: ## start the 20x Locust surge from inside the cluster (STAGES, default 6 min)
 	kubectl -n lifeboat delete job locust --ignore-not-found --wait=true
 	kubectl -n lifeboat create configmap locustfile --from-file=loadtest/locustfile.py --dry-run=client -o yaml | kubectl apply -f -
-	kubectl create -f deploy/jobs/locust.yaml
+	sed -e 's|__STAGES__|$(STAGES)|' deploy/jobs/locust.yaml | kubectl create -f -
 
 demo: deploy workloads wait load replay ## deploy everything, then start the surge and the flood replay together
 	@echo
