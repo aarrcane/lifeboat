@@ -84,10 +84,12 @@ class Lifeboat:
                                        now + cfg.forecast_ttl_s), cfg.hmac_secret))
             metrics.FORECAST_RATIO.set(self.traffic.ratio())
 
+        rec = self.store.get()
+        if rec is not None and not self.executor.is_active:            # standby: plan level is the truth
+            self.voter.follow(Level(rec.level))
         readings = self.book.snapshot() if cfg.early_warning else []   # B2: reactive only
         level = self.voter.evaluate(readings, now, struggling)
 
-        rec = self.store.get()
         workloads = discovery.list_workloads(cfg, self.cp)
         discovery.apply_originals(workloads, rec)                      # pre-triage view
         applied = sum(s.params.get("delta_millis", 0) for s in (rec.steps.values() if rec else []) if s.done)

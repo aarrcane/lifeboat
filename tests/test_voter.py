@@ -138,3 +138,13 @@ def test_e4_replay_scenarios_zero_false_l2_and_zero_missed():
     assert _replay_peak("scenario_noisy.jsonl") == Level.L1
     assert _replay_peak("scenario_conflicting.jsonl") == Level.L1
     assert _replay_peak("scenario_no_crisis.jsonl") == Level.L1
+
+
+def test_follow_copies_plan_level_and_resets_calm_timer():
+    v = Voter("k", calm_seconds=60)
+    v.evaluate([], 0.0, True)                       # L3 from distress
+    v.evaluate([], 10.0, False)                     # calm timer starts
+    v.follow(Level.L2)
+    assert v.level == Level.L2
+    assert v.evaluate([], 65.0, False) == Level.L2  # follow cleared the timer: it restarts at 65 s
+    assert v.evaluate([], 126.0, False) == Level.L1

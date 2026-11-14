@@ -25,6 +25,13 @@ class Voter:
             self.level = level
         self._calm_since = None
 
+    def follow(self, level: Level) -> None:
+        """Standby replicas copy the level from the TriagePlan (the shared truth in etcd), so a
+        replica that takes over carries on from it instead of starting at L0 with an empty
+        reading book. It can only step down after its own calm period as leader."""
+        self.level = Level(level)
+        self._calm_since = None
+
     def valid_readings(self, readings: Iterable[Reading], now: float) -> list[Reading]:
         # expired / unsigned / too old => treated as missing
         return [r for r in readings

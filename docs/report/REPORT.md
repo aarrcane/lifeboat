@@ -342,8 +342,10 @@ the Figure 2 scenario. TODO (P3).
   occurred during the project, so the L2 path from a real PUB alert is tested only with a
   constructed fixture. TODO (P4): run `make feeds` on the AWS cluster after the experiments and
   record the accepted live readings (feed job logs showing HTTP 202) as end-to-end evidence.
-- **Voter state per replica.** The calm-period timer is not shared, so a newly promoted standby
-  may step down one calm period later.
+- **Calm timer per replica.** The alert level is read from the TriagePlan: a standby copies
+  it every tick, so a newly promoted executor carries on from the same level instead of
+  starting at L0. What is still per replica is the calm-period timer, so the new executor
+  steps down at the earliest one calm period after it took over.
 - **Prometheus dependency.** S3 and L3 detection need Prometheus; Lifeboat fails safe without
   it, but production should run Prometheus with two replicas.
 - **No seasonality.** Holt-Winters could model daily traffic patterns.

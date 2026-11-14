@@ -10,6 +10,12 @@ For each kill it measures:
   steps_left_half_done steps still not done in the TriagePlan after --settle seconds
   steps_mismatched     steps marked done whose workload is not in the target state (drift)
   takeover_increment   new takeover number - old (fencing: must be >= 1)
+  level_before/after   TriagePlan level before the (first) kill and after the (last) settle
+  steps_before/after   steps in the TriagePlan before and after
+  plan_kept            1 if, watched every 0.5 s from the kill to the end of the settle time, the
+                       plan level never dropped and no step disappeared. Run it while the scenario
+                       is still at L2 (the replayed warnings must not end during the test), or a
+                       legitimate step-down would count as 0.
 plus Lifeboat's own CPU/memory from `kubectl top` (needs metrics-server; k3s ships it).
 
 Steps set a target state (suspend, replicas, ConfigMap data), so redoing one is harmless; the
@@ -32,7 +38,8 @@ from lifeboat.config import Config  # noqa: E402
 from lifeboat.models import PlanRecord  # noqa: E402
 
 FIELDS = ["test", "run", "takeover_s", "steps_total", "steps_left_half_done", "steps_mismatched",
-          "takeover_increment", "lifeboat_cpu_m", "lifeboat_mem_mi"]
+          "takeover_increment", "level_before", "level_after", "steps_before", "steps_after",
+          "plan_kept", "lifeboat_cpu_m", "lifeboat_mem_mi"]
 CFG = Config()
 
 
@@ -75,26 +82,40 @@ def mismatched(rec: PlanRecord) -> int:
     return sum(1 for s in rec.steps.values() if s.done and acts._current(s) != acts._target(s))
 
 
+def kept(before: PlanRecord, rec: PlanRecord) -> bool:
+    """The triage was not undone: level did not drop and every step is still in the plan."""
+    return rec.level >= before.level and set(before.steps) <= set(rec.steps)
+
+
 def kill_and_measure(timeout: float, settle: float) -> dict:
     old_holder, before = lease_holder(), plan()
     if not old_holder or before is None:
         sys.exit("no active executor or no TriagePlan: start a crisis replay first (make demo)")
     t0 = time.time()
     kubectl("-n", CFG.system_namespace, "delete", "pod", old_holder, "--grace-period=0", "--force", "--wait=false")
-    took, rec = None, before
+    took, rec, ok = None, before, True
     while time.time() - t0 < timeout:
         holder, rec = lease_holder(), plan() or rec
+        ok = ok and kept(before, rec)
         if holder and holder != old_holder and rec.takeover > before.takeover:
             took = time.time() - t0
             break
         time.sleep(0.5)
-    time.sleep(settle)
-    rec = plan() or rec
+    end = time.time() + settle
+    while True:                                   # keep watching: the triage must not be undone
+        rec = plan() or rec
+        ok = ok and kept(before, rec)
+        if time.time() >= end:
+            break
+        time.sleep(0.5)
     return {"takeover_s": round(took, 1) if took is not None else "",
             "steps_total": len(rec.steps),
             "steps_left_half_done": sum(not s.done for s in rec.steps.values()),
             "steps_mismatched": mismatched(rec),
-            "takeover_increment": rec.takeover - before.takeover}
+            "takeover_increment": rec.takeover - before.takeover,
+            "level_before": before.level, "level_after": rec.level,
+            "steps_before": len(before.steps), "steps_after": len(rec.steps),
+            "plan_kept": int(ok)}
 
 
 def main() -> int:
@@ -113,8 +134,12 @@ def main() -> int:
         if new:
             w.writeheader()
         for run in range(1, args.runs + 1):
-            for _ in range(args.repeat):
-                row = kill_and_measure(args.timeout, args.settle if _ == args.repeat - 1 else 0)
+            rows = [kill_and_measure(args.timeout, args.settle if i == args.repeat - 1 else 0)
+                    for i in range(args.repeat)]
+            row = dict(rows[-1])                  # back-to-back kills: before = first, after = last
+            row.update(level_before=rows[0]["level_before"], steps_before=rows[0]["steps_before"],
+                       plan_kept=int(all(r["plan_kept"] for r in rows)),
+                       takeover_increment=sum(r["takeover_increment"] for r in rows))
             cpu, mem = parse_top(kubectl("top", "pod", "-n", CFG.system_namespace, "-l", "app=lifeboat",
                                          "--no-headers"))
             row.update(test=test, run=run, lifeboat_cpu_m=round(cpu), lifeboat_mem_mi=round(mem))

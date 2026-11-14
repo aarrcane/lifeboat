@@ -48,7 +48,10 @@ scenario × voter (`naive` = any one source, `lifeboat` = 2 of 3). Regenerate wi
 | `steps_total` | steps in the TriagePlan |
 | `steps_left_half_done` | steps still not done after the settle time (target 0) |
 | `steps_mismatched` | steps marked done whose workload is not in the target state (target 0) |
-| `takeover_increment` | new takeover number − old (fencing, must be ≥ 1) |
+| `takeover_increment` | new takeover number − old (fencing, must be ≥ 1; summed over back-to-back kills) |
+| `level_before`, `level_after` | TriagePlan level before the (first) kill and after the settle time |
+| `steps_before`, `steps_after` | steps in the TriagePlan before and after |
+| `plan_kept` | 1 if, watched every 0.5 s from the kill to the end of the settle, the level never dropped and no step disappeared (target 1). Without it the test would pass even if the new executor undid the triage. Run it while the scenario is still at L2. |
 | `lifeboat_cpu_m`, `lifeboat_mem_mi` | Lifeboat's own cost per replica from `kubectl top` |
 
 Run it while a crisis replay is going (Lifeboat at L2, plan written):
