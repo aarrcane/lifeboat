@@ -88,3 +88,19 @@ def test_new_leader_steps_down_only_after_its_own_calm_period():
     assert store.get().level == 2                             # calm timer started at takeover
     B.step(t + 61)
     assert store.get().level == 1                             # one level per calm period
+
+
+def test_source_gauge_drops_to_zero_when_a_feed_goes_silent():
+    from prometheus_client import REGISTRY
+    store, cluster, lease = InMemoryPlanStore(), FakeCluster(), FakeLease()
+    ea = FakeElector("A", lease)
+    A = make_replica(store, cluster, ea)
+    ea.acquire_if_expired()
+    now = 1000.0
+    A.book.add(sign(Reading("S1", 1, now - 5, now + 10), SECRET))
+    A.book.add(sign(Reading("S1", 2, now, now + 30), SECRET))            # latest reading wins
+    A.step(now)
+    gauge = lambda src: REGISTRY.get_sample_value("lifeboat_source_level", {"source": src})  # noqa: E731
+    assert gauge("S1") == 2 and gauge("S2") == 0
+    A.step(now + 60)                                                     # S1 expired: feed stopped
+    assert gauge("S1") == 0

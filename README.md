@@ -27,10 +27,12 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 Full guide, AWS run and troubleshooting: **[docs/CLUSTER.md](docs/CLUSTER.md)**. `make help` lists every target.
 ```bash
 pip install -r requirements-dev.txt && make test        # logic tests, no cluster needed
-make cluster import                                      # 3-server k3d cluster, images on every node
-make deploy monitoring workloads wait                    # secrets, MinIO, controller x2, Prometheus, demo tiers
+make up                                                  # = make cluster import deploy monitoring workloads wait:
+                                                         #   3-server k3d cluster, images, secrets, MinIO,
+                                                         #   controller x2, Prometheus, demo tiers
 make itest                                               # real-cluster check: Lease, TriagePlan, takeover, revert
-make demo                                                # 20x surge + flood replay, from inside the cluster
+make demo                                                # 20x surge + flood warning 60 s ahead, speed 1 (~8 min)
+make experiment RUNS=1                                   # measure E1/E2/E3 for B0, B1, B2, lifeboat
 kubectl -n lifeboat get triageplans -w                   # watch the plan
 make reset                                               # clean L0 before the next run
 ```

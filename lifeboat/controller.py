@@ -110,8 +110,13 @@ class Lifeboat:
         metrics.LEVEL.set(int(level))
         metrics.C1_STRUGGLING.set(int(struggling))
         metrics.IS_ACTIVE.set(int(self.executor.is_active))
+        latest: dict[str, Reading] = {}
         for r in self.voter.valid_readings(readings, now):
-            metrics.SOURCE_LEVEL.labels(r.source).set(r.level)
+            if r.source not in latest or r.ts > latest[r.source].ts:
+                latest[r.source] = r
+        # no valid reading => 0, so the dashboard shows a feed that went silent
+        for src in sorted({"S1", "S2", "S3"} | set(latest)):
+            metrics.SOURCE_LEVEL.labels(src).set(latest[src].level if src in latest else 0)
         rec = self.store.get()
         if rec:
             metrics.TAKEOVER.set(rec.takeover)

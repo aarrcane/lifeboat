@@ -1,5 +1,5 @@
 # Lifeboat - run `make help` for the list. Quick start on a laptop (Docker + k3d + kubectl + helm):
-#   make cluster import deploy monitoring workloads demo
+#   make up demo
 CLUSTER  ?= lifeboat
 SPEED    ?= 10
 SCENARIO ?= data/scenario_flash_flood.jsonl
@@ -8,13 +8,18 @@ SETUP    ?= all
 RUNS     ?= 3
 S3_MODE  ?= $(shell grep -s '^S3_MODE=' .env | cut -d= -f2)
 PLATFORM ?= linux/amd64
+# kube-prometheus-stack chart version. Pin it to what the AWS cluster runs (`helm -n monitoring list`).
+KPS_VERSION ?=
 export CLUSTER
 
-.PHONY: help test itest images cluster cluster-down import k3s-import secrets deploy feeds feeds-off workloads wait \
+.PHONY: help up test itest images cluster cluster-down import k3s-import secrets deploy feeds feeds-off workloads wait \
         monitoring restart replay load demo reset status undeploy scenario lint experiment
 
 help:   ## list targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t 16
+
+up:     ## laptop, one command: k3d cluster, images, Lifeboat, monitoring, demo workloads, wait
+	$(MAKE) cluster import deploy monitoring workloads wait
 
 test:   ## unit tests (no cluster needed)
 	python -m pytest -q
@@ -72,6 +77,7 @@ monitoring: ## Prometheus + Grafana (kube-prometheus-stack) and the PodMonitors
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update prometheus-community
 	helm upgrade --install kps prometheus-community/kube-prometheus-stack -n monitoring --create-namespace \
+	  $(if $(KPS_VERSION),--version $(KPS_VERSION)) \
 	  --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false --wait --timeout 10m
 	kubectl apply -f deploy/monitoring/podmonitors.yaml -f deploy/monitoring/grafana-dashboard.yaml \
 	  -f deploy/monitoring/alert-rules.yaml
@@ -89,9 +95,12 @@ load: ## start the 20x Locust surge from inside the cluster (STAGES, default 6 m
 	kubectl -n lifeboat create configmap locustfile --from-file=loadtest/locustfile.py --dry-run=client -o yaml | kubectl apply -f -
 	sed -e 's|__STAGES__|$(STAGES)|' deploy/jobs/locust.yaml | kubectl create -f -
 
-demo: deploy workloads wait load replay ## deploy everything, then start the surge and the flood replay together
+demo: deploy workloads wait load ## deploy, then the surge plus the experiment warnings at speed 1 (alert leads the surge by 60 s)
+	$(MAKE) replay SCENARIO=data/scenario_experiment.jsonl SPEED=1
 	@echo
-	@echo "Demo running. Watch it with:"
+	@echo "Demo running (about 8 min): L2 at t=90 s, surge t=150-330 s, back to L0 after the calm period."
+	@echo "For the video, shorten the calm period first: kubectl -n lifeboat set env deploy/lifeboat LIFEBOAT_CALM_MINUTES=1"
+	@echo "Watch it with:"
 	@echo "  kubectl -n lifeboat get triageplans -w"
 	@echo "  kubectl -n lifeboat logs -f job/replay"
 	@echo "  make status"
