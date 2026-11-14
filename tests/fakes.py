@@ -1,4 +1,5 @@
 from lifeboat.models import Step
+from lifeboat.plan_store import Gone
 
 
 class Crash(BaseException):
@@ -33,6 +34,8 @@ class FakeCluster:
         self.apply_log = []
         self.prepared = []
         self.lose_lease_in_prepare = None
+        self.gone = set()                     # step keys whose object was deleted (API 404)
+        self.broken = set()                   # step keys whose API calls fail (any other error)
 
 
 class FakeActions:
@@ -49,20 +52,31 @@ class FakeActions:
         if self.c.lose_lease_in_prepare:
             self.c.lose_lease_in_prepare()
 
+    def _check(self, s):
+        if s.key in self.c.gone:
+            raise Gone(s.key)
+        if s.key in self.c.broken:
+            raise RuntimeError(f"API error on {s.key}")
+
     def read_original(self, s):
+        self._check(s)
         return dict(self.c.state.get(s.key, {"suspend": False, "replicas": 3, "data": {}}))
 
     def apply(self, s):
+        self._check(s)
         self.c.state[s.key] = self._target(s)
         self.c.apply_log.append(s.key)
         if self.crash_key == s.key:
             raise Crash()                     # dies after acting, before marking done
 
     def revert(self, s):
+        self._check(s)
         self.c.state[s.key] = dict(s.original)
 
     def is_reverted(self, s):
+        self._check(s)
         return self.c.state.get(s.key) == s.original
 
     def verify(self, s):
+        self._check(s)
         return self.c.state.get(s.key) == self._target(s)

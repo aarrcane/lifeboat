@@ -69,8 +69,12 @@ class FileCheckpointStore(CheckpointStore):
 class S3CheckpointStore(CheckpointStore):
     def __init__(self, bucket: str, endpoint: str = ""):
         import boto3                                # lazy: tests don't need it
+        from botocore.config import Config as BotoConfig
         self.bucket = bucket
-        self.s3 = boto3.client("s3", endpoint_url=endpoint or None)
+        # short timeouts: the controller reads checkpoints every tick, and boto3's default 60 s
+        # would let a slow S3/MinIO stall the whole loop (including C1 scale-up)
+        self.s3 = boto3.client("s3", endpoint_url=endpoint or None, config=BotoConfig(
+            connect_timeout=2, read_timeout=3, retries={"max_attempts": 2}))
         self._ensure_bucket()
 
     def _ensure_bucket(self) -> None:

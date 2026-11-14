@@ -1,6 +1,8 @@
 """Find tiered workloads (label lifeboat.io/tier) and cluster capacity."""
 from __future__ import annotations
 
+import logging
+
 from kubernetes import client
 
 from .checkpoint import CheckpointStore
@@ -10,6 +12,8 @@ from .models import PlanRecord, Tier, Workload, step_key
 TIER_LABEL = "lifeboat.io/tier"
 RESTART_ANNOTATION = "lifeboat.io/restart-seconds"
 OVERDUE_ANNOTATION = "lifeboat.io/overdue"
+
+log = logging.getLogger("lifeboat.discovery")
 
 
 def parse_cpu(q: str) -> int:
@@ -22,18 +26,55 @@ def _pod_millis(template) -> int:
                for c in template.spec.containers if c.resources)
 
 
+def job_finished(job) -> bool:
+    """A finished Job frees nothing when paused, so it must not count as capacity."""
+    st = job.status
+    if st is None:
+        return False
+    if getattr(st, "completion_time", None):
+        return True
+    return any(c.type in ("Complete", "Failed") and c.status == "True" for c in (st.conditions or []))
+
+
+def _tier(obj):
+    """Tier from the label, or None (with a warning) for a mistyped label: one bad workload
+    must not crash every tick."""
+    label = (obj.metadata.labels or {}).get(TIER_LABEL, "")
+    try:
+        return Tier.from_label(label)
+    except (KeyError, ValueError):
+        log.warning("%s/%s has unknown tier label %r, ignoring it", obj.metadata.namespace,
+                    obj.metadata.name, label)
+        return None
+
+
+def _latest_checkpoint(cp: CheckpointStore, name: str):
+    """The checkpoint store is not allowed to stall or break a tick: failure => none known."""
+    try:
+        return cp.latest_ts(name)
+    except Exception as e:
+        log.warning("checkpoint lookup for %s failed: %s", name, e)
+        return None
+
+
 def list_workloads(cfg: Config, cp: CheckpointStore) -> list[Workload]:
     batch, apps = client.BatchV1Api(), client.AppsV1Api()
     ns, out = cfg.workload_namespace, []
     for j in batch.list_namespaced_job(ns, label_selector=TIER_LABEL).items:
+        tier = _tier(j)
+        if tier is None or job_finished(j):
+            continue
         a = j.metadata.annotations or {}
         out.append(Workload(
-            j.metadata.name, ns, Tier.from_label(j.metadata.labels[TIER_LABEL]), "Job",
-            _pod_millis(j.spec.template), j.spec.parallelism or 1, cp.latest_ts(j.metadata.name),
+            j.metadata.name, ns, tier, "Job",
+            _pod_millis(j.spec.template), j.spec.parallelism or 1, _latest_checkpoint(cp, j.metadata.name),
             float(a.get(RESTART_ANNOTATION, 30)), a.get(OVERDUE_ANNOTATION, "false") == "true"))
     for d in apps.list_namespaced_deployment(ns, label_selector=TIER_LABEL).items:
+        tier = _tier(d)
+        if tier is None:
+            continue
         out.append(Workload(
-            d.metadata.name, ns, Tier.from_label(d.metadata.labels[TIER_LABEL]), "Deployment",
+            d.metadata.name, ns, tier, "Deployment",
             _pod_millis(d.spec.template), d.spec.replicas or 0))
     return out
 

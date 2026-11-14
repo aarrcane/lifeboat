@@ -35,3 +35,26 @@ def test_returns_as_soon_as_all_apps_saved(tmp_path):
     t0 = time.time()
     a.prepare([job("j1"), job("j2")])
     assert time.time() - t0 < 1
+
+
+def test_api_404_becomes_gone(tmp_path):
+    import pytest
+    from kubernetes.client.rest import ApiException
+
+    from lifeboat.plan_store import Gone
+    a = K8sActions(Config(), FileCheckpointStore(str(tmp_path)))
+
+    def missing(*_a, **_k):
+        raise ApiException(status=404, reason="Not Found")
+
+    def denied(*_a, **_k):
+        raise ApiException(status=403, reason="Forbidden")
+    a.batch = type("B", (), {"read_namespaced_job": staticmethod(missing),
+                             "patch_namespaced_job": staticmethod(missing)})()
+    with pytest.raises(Gone):
+        a.apply(job("deleted"))
+    with pytest.raises(Gone):
+        a.revert(job("deleted"))
+    a.batch.read_namespaced_job = denied
+    with pytest.raises(ApiException):                             # other errors stay errors
+        a.verify(job("forbidden"))

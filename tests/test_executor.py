@@ -100,3 +100,71 @@ def test_prepare_failure_does_not_block_pauses():
     E = Executor(store, Boom(cluster), ea)
     assert E.tick(2, steps(2)) == "active"
     assert all(s.done for s in store.get().steps.values())
+
+
+def c1_step(replicas=10):
+    return Step(step_key("scale_deployment", "ns", "c1"), "scale_deployment", "ns", "c1",
+                {"replicas": replicas})
+
+
+def active_executor():
+    store, cluster, lease = InMemoryPlanStore(), FakeCluster(), FakeLease()
+    ea = FakeElector("A", lease); ea.acquire_if_expired()
+    return store, cluster, Executor(store, FakeActions(cluster), ea)
+
+
+def test_failing_step_does_not_block_later_steps():
+    # bugs_repro section C: a pause that fails must not stop C1 being scaled
+    store, cluster, E = active_executor()
+    E.tick(2, steps(1))                                               # j1 in the plan, done
+    cluster.state.clear()
+    store_rec = store.get(); store_rec.steps["suspend_job:ns/j1"].done = False; store.put(store_rec)
+    cluster.broken.add("suspend_job:ns/j1")                          # its API calls now fail
+    for _ in range(3):
+        assert E.tick(2, steps(3) + [c1_step()]) == "active"
+    done = {s.name: s.done for s in store.get().steps.values()}
+    assert done == {"j1": False, "j2": True, "j3": True, "c1": True}
+    assert cluster.state[c1_step().key] == {"replicas": 10}
+    cluster.broken.clear()
+    E.tick(2, steps(3) + [c1_step()])                                 # retried next tick
+    assert all(s.done for s in store.get().steps.values())
+
+
+def test_deleted_object_is_dropped_from_plan_and_others_go_ahead():
+    store, cluster, E = active_executor()
+    E.tick(2, steps(2))
+    rec = store.get(); rec.steps["suspend_job:ns/j1"].done = False; store.put(rec)
+    cluster.gone.add("suspend_job:ns/j1")                             # the Job was deleted
+    E.tick(2, steps(2) + [c1_step()])
+    rec = store.get()
+    assert "suspend_job:ns/j1" not in rec.steps
+    assert rec.steps[c1_step().key].done
+
+
+def test_new_step_for_deleted_object_is_not_added():
+    store, cluster, E = active_executor()
+    cluster.gone.add("suspend_job:ns/j2")
+    assert E.tick(2, steps(3)) == "active"
+    assert list(store.get().steps) == ["suspend_job:ns/j1", "suspend_job:ns/j3"]
+
+
+def test_failed_revert_does_not_block_older_reverts():
+    # bugs_repro section D: newest step cannot be reverted, the older ones still are
+    store, cluster, E = active_executor()
+    E.tick(2, steps(3))
+    cluster.broken.add("suspend_job:ns/j3")
+    for _ in range(10):
+        E.tick(0, [])
+    assert list(store.get().steps) == ["suspend_job:ns/j3"]           # only the broken one waits
+    assert cluster.state["suspend_job:ns/j1"] == {"suspend": False, "replicas": 3, "data": {}}
+    cluster.broken.clear()
+    E.tick(0, [])
+    assert store.get().steps == {}
+
+
+def test_revert_of_deleted_object_is_dropped():
+    store, cluster, E = active_executor()
+    E.tick(2, steps(3))
+    cluster.gone.add("suspend_job:ns/j3")
+    E.tick(0, [])                                                     # j3 dropped, j2 reverted, same tick
+    assert list(store.get().steps) == ["suspend_job:ns/j1"]

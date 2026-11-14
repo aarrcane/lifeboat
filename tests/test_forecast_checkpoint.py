@@ -55,3 +55,23 @@ def test_checkpoint_roundtrip(tmp_path):
     assert s.latest_ts("job") == ts and s.load("job") == {"unit": 42}
     r = s.request("job")
     assert s.last_request_ts("job") == r
+
+
+def test_s3_client_has_short_timeouts(monkeypatch):
+    import boto3
+
+    from lifeboat.checkpoint import S3CheckpointStore
+    seen = {}
+
+    class FakeClient:
+        def head_bucket(self, **_):
+            return {}
+
+    def fake_client(service, endpoint_url=None, config=None):
+        seen["config"] = config
+        return FakeClient()
+    monkeypatch.setattr(boto3, "client", fake_client)
+    S3CheckpointStore("bucket", "http://minio:9000")
+    cfg = seen["config"]
+    assert cfg.connect_timeout == 2 and cfg.read_timeout == 3
+    assert cfg.retries["max_attempts"] == 2

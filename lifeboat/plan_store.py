@@ -12,6 +12,10 @@ class Fenced(Exception):
     """A newer executor (higher takeover number) owns the plan; our write is rejected."""
 
 
+class Gone(Exception):
+    """The object a step acts on no longer exists (API 404): nothing to apply or restore."""
+
+
 class PlanStore(Protocol):
     def get(self) -> Optional[PlanRecord]: ...
     def put(self, rec: PlanRecord) -> None:

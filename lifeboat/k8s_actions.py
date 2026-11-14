@@ -5,10 +5,12 @@ import logging
 import time
 
 from kubernetes import client
+from kubernetes.client.rest import ApiException
 
 from .checkpoint import CheckpointStore
 from .config import Config
 from .models import Step
+from .plan_store import Gone
 
 log = logging.getLogger("lifeboat.actions")
 
@@ -20,6 +22,14 @@ class K8sActions:
 
     # state shape is identical for 'original', 'target' and 'current'
     def _current(self, s: Step) -> dict:
+        try:
+            return self._read(s)
+        except ApiException as e:
+            if e.status == 404:
+                raise Gone(s.key) from e
+            raise
+
+    def _read(self, s: Step) -> dict:
         if s.action == "suspend_job":
             return {"suspend": bool(self.batch.read_namespaced_job(s.name, s.namespace).spec.suspend)}
         if s.action == "scale_deployment":
@@ -39,6 +49,14 @@ class K8sActions:
         return self._current(s)
 
     def _set(self, s: Step, state: dict) -> None:
+        try:
+            self._write(s, state)
+        except ApiException as e:
+            if e.status == 404:
+                raise Gone(s.key) from e
+            raise
+
+    def _write(self, s: Step, state: dict) -> None:
         if s.action == "suspend_job":
             self.batch.patch_namespaced_job(s.name, s.namespace, {"spec": {"suspend": state["suspend"]}})
         elif s.action == "scale_deployment":

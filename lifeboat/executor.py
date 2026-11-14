@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Protocol
 
 from .models import PlanRecord, Step
-from .plan_store import Fenced, PlanStore
+from .plan_store import Fenced, Gone, PlanStore
 
 log = logging.getLogger("lifeboat.executor")
 
@@ -69,7 +69,16 @@ class Executor:
         for key, s in want.items():
             cur = rec.steps.get(key)
             if cur is None:
-                s.original = self.actions.read_original(s)
+                try:
+                    s.original = self.actions.read_original(s)
+                except Fenced:
+                    raise
+                except Gone:
+                    log.warning("%s no longer exists, not adding it to the plan", key)
+                    continue
+                except Exception:                                # no original => cannot undo it later
+                    log.exception("could not read %s, will add it next tick", key)
+                    continue
                 s.done = False
                 rec.steps[key] = s
                 changed = True
@@ -77,17 +86,25 @@ class Executor:
                 cur.params, cur.done = s.params, False           # keep original settings
                 changed = True
         stale = [k for k in rec.steps if k not in want]
-        if stale:                                                # undo ONE step per tick, newest first
-            st = rec.steps[stale[-1]]
+        for key in reversed(stale):                              # undo ONE step per tick, newest first
+            st = rec.steps[key]
             try:
                 self.actions.revert(st)
-                if self.actions.is_reverted(st):                 # checked against original settings
-                    del rec.steps[st.key]
-                    changed = True
+                reverted = self.actions.is_reverted(st)          # checked against original settings
             except Fenced:
                 raise
+            except Gone:
+                log.warning("%s no longer exists, nothing to restore: dropping it", key)
+                del rec.steps[key]
+                changed = True
+                continue                                         # did no work: try the next one
             except Exception:
-                log.exception("revert failed for %s, will retry", st.key)
+                log.exception("revert failed for %s, will retry; trying the next one", key)
+                continue
+            if reverted:
+                del rec.steps[key]
+                changed = True
+                break
         if changed:
             self.store.put(rec)
 
@@ -103,14 +120,21 @@ class Executor:
         leader, now_takeover = self.elector.try_acquire_or_renew()   # renew after the wait
         if not leader or now_takeover != takeover:
             raise Fenced("lost lease while preparing")
-        for s in pending:
+        for s in pending:                                        # steps are independent:
             if not self.elector.still_leader(takeover):          # verify Lease ownership
                 raise Fenced("lost lease")
             try:
                 self.actions.apply(s)
-            except Exception:
+            except Fenced:
+                raise
+            except Gone:
+                log.warning("%s no longer exists: dropping it from the plan", s.key)
+                del rec.steps[s.key]
+                self.store.put(rec)
+                continue
+            except Exception:                                    # one bad step must not block the rest
                 log.exception("apply failed for %s, will retry next tick", s.key)
-                return
+                continue
             s.done = True
             self.store.put(rec)                                  # conditional write
 
@@ -122,5 +146,7 @@ class Executor:
                     if not self.actions.verify(s):
                         log.warning("drift on %s, re-applying", s.key)
                         self.actions.apply(s)
+                except Gone:
+                    log.warning("%s no longer exists (left in the plan, dropped on revert)", s.key)
                 except Exception:
                     log.exception("reconcile failed for %s", s.key)
