@@ -120,3 +120,39 @@ def test_e2_service_quality_and_csv_parser(tmp_path):
     assert parsed["served_pct"] == 99.0
     assert parsed["p50_ms"] == 24.0
     assert parsed["p95_ms"] == 180.0
+
+
+def test_webapp_latency_counts_queue_time_from_x_request_start(tmp_path):
+    feat = tmp_path / "degraded"
+    feat.write_text("false", encoding="utf-8")
+    mod = _load_webapp_with("C1", burn_ms=0.0, features_file=str(feat))
+    # header parses and is sane: the wait before the handler counts
+    assert mod.observed_latency(0.02, "100.0", now=101.5) == 1.5
+    # handler time wins when it is longer than the measured wait
+    assert mod.observed_latency(0.02, "100.0", now=100.01) == 0.02
+    # missing, garbage, in the future or absurdly old: fall back to handler time
+    for hdr, now in [(None, 100.0), ("abc", 100.0), ("200.0", 100.0), ("100.0", 200.0)]:
+        assert mod.observed_latency(0.02, hdr, now=now) == 0.02
+
+    import time as _t
+    client = mod.app.test_client()
+
+    def bucket(le):
+        m = client.get("/metrics").get_data(as_text=True)
+        line = next(x for x in m.splitlines()
+                    if x.startswith(f'http_request_duration_seconds_bucket{{le="{le}",tier="C1"}}'))
+        return float(line.split()[-1])
+    before = bucket("5.0") - bucket("2.5")
+    client.get("/", headers={"X-Request-Start": str(_t.time() - 3.0)})   # waited 3 s in a queue
+    assert bucket("5.0") - bucket("2.5") == before + 1                    # counted as 2.5-5 s, not 0 s
+    assert bucket("30.0") >= bucket("5.0")
+
+
+def test_webapp_burn_uses_cpu_time_not_wall_clock(tmp_path):
+    import time as _t
+    feat = tmp_path / "degraded"
+    feat.write_text("false", encoding="utf-8")
+    mod = _load_webapp_with("C1", burn_ms=20.0, features_file=str(feat))
+    c0 = _t.thread_time()
+    mod.burn(20.0)
+    assert _t.thread_time() - c0 >= 0.02

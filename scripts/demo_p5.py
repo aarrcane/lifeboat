@@ -22,9 +22,10 @@ from loadtest.baselines import SURGE_STAGES, calibrate_cpu, evaluate_all
 
 def demo_part1_baselines() -> None:
     print("=== Part 1: 20x surge & baselines (E1 time to capacity, E2 service quality) ===")
+    print("(model prediction, not measured: scripts/run_experiment.py measures the cluster)")
     cal = calibrate_cpu(burn_ms=20.0, pod_cpu_millis=250)
     print(
-        f"CPU calibration : BURN_MS={cal.burn_ms:.0f} ms | {cal.pod_cpu_millis}m pod -> "
+        f"CPU calibration : BURN_MS={cal.burn_ms:.0f} ms CPU/request | {cal.pod_cpu_millis}m CPU limit/pod -> "
         f"{cal.max_rps_per_pod:.1f} RPS/pod ({cal.cost_millis_per_rps:.0f} mCPU/RPS)"
     )
     print(f"Locust stages   : {list(SURGE_STAGES)}  (10 -> 200 users = 20x surge for 5 min)\n")
@@ -73,8 +74,8 @@ def demo_part2_webapp() -> None:
         metrics_text = client.get("/metrics").get_data(as_text=True)
         has_counter = 'http_requests_total{code="200",tier="C2"} 2.0' in metrics_text
 
-        print(f"1. C2 normal (L0-L2)   : response={r_normal}  burn={normal_ms:.1f} ms")
-        print(f"2. C2 degraded (at L3) : response={r_deg}   burn={deg_ms:.1f} ms  (~80% CPU saved)")
+        print(f"1. C2 normal (L0-L2)   : response={r_normal}  CPU burn={normal_ms:.1f} ms")
+        print(f"2. C2 degraded (at L3) : response={r_deg}   CPU burn={deg_ms:.1f} ms  (~80% CPU saved)")
         print(f"3. Prometheus /metrics : http_requests_total & histogram exported = {has_counter}")
 
 

@@ -2,7 +2,7 @@
 import os
 import time
 
-from flask import Flask, Response
+from flask import Flask, Response, request
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 TIER = os.getenv("TIER", "C1")
@@ -12,7 +12,7 @@ FEATURES_FILE = os.getenv("FEATURES_FILE", "/etc/lifeboat/features/degraded")
 app = Flask(__name__)
 REQS = Counter("http_requests_total", "requests", ["tier", "code"])
 LAT = Histogram("http_request_duration_seconds", "latency", ["tier"],
-                buckets=(.01, .025, .05, .1, .25, .5, 1, 2.5, 5))
+                buckets=(.01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30))
 
 
 def degraded() -> bool:
@@ -23,9 +23,21 @@ def degraded() -> bool:
 
 
 def burn(ms: float) -> None:
-    end = time.perf_counter() + ms / 1000
-    while time.perf_counter() < end:
+    # CPU time of this thread, not wall clock: with a 250m limit a request really costs
+    # `ms` of CPU, so a pod serves 250 / BURN_MS req/s (12.5 with the defaults).
+    end = time.thread_time() + ms / 1000
+    while time.thread_time() < end:
         pass
+
+
+def observed_latency(handler_s: float, request_start: str | None, now: float) -> float:
+    """Latency seen by the client: from arrival (X-Request-Start, epoch seconds set by the load
+    generator) when the header is sane, so time spent queued in gunicorn counts too."""
+    try:
+        waited = now - float(request_start)
+    except (TypeError, ValueError):
+        return handler_s
+    return max(handler_s, waited) if 0 <= waited <= 60 else handler_s
 
 
 @app.route("/")
@@ -35,7 +47,8 @@ def index():
     if TIER == "C2" and degraded():
         cost *= 0.2                                         # extra features switched off
     burn(cost)
-    LAT.labels(TIER).observe(time.perf_counter() - t0)
+    LAT.labels(TIER).observe(observed_latency(time.perf_counter() - t0,
+                                              request.headers.get("X-Request-Start"), time.time()))
     REQS.labels(TIER, "200").inc()
     return {"tier": TIER, "degraded": degraded()}
 
