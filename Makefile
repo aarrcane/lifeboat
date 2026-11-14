@@ -9,7 +9,7 @@ RUNS     ?= 3
 S3_MODE  ?= $(shell grep -s '^S3_MODE=' .env | cut -d= -f2)
 PLATFORM ?= linux/amd64
 # kube-prometheus-stack chart version. Pin it to what the AWS cluster runs (`helm -n monitoring list`).
-KPS_VERSION ?=
+KPS_VERSION ?= 93.2.2
 export CLUSTER
 
 .PHONY: help up test itest images cluster cluster-down import k3s-import secrets deploy feeds feeds-off workloads wait \
