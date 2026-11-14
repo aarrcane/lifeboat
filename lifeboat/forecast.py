@@ -17,7 +17,9 @@ class Holt:
             self.level, self.trend = x, 0.0
             return
         prev = self.level
-        self.level = self.alpha * x + (1 - self.alpha) * (prev + self.trend)
+        # Traffic cannot be negative. Without the clamp the level overshoots below 0 when a surge
+        # ends, and the trend then bounces back: a phantom S3 vote minutes after traffic stopped.
+        self.level = max(0.0, self.alpha * x + (1 - self.alpha) * (prev + self.trend))
         self.trend = self.beta * (self.level - prev) + (1 - self.beta) * self.trend
 
     def forecast(self, h: int) -> float:

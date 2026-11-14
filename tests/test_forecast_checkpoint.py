@@ -10,6 +10,25 @@ def test_holt_follows_ramp():
     assert h.forecast(5) > 90
 
 
+def test_no_phantom_vote_after_a_surge_ends():
+    # Regression: when `make demo`'s surge stopped, the Holt level went below 0 and the trend
+    # bounced back, so S3 voted L1/L2 for about 2 minutes with no traffic at all.
+    from lifeboat.config import Config
+    cfg = Config()
+    f = TrafficForecaster(cfg.holt_alpha, cfg.holt_beta, cfg.forecast_horizon_steps,
+                          cfg.x_factor, cfg.y_factor, cfg.forecast_warmup_samples)
+    users = lambda t: 10 if t < 150 else 200 if t < 330 else 10 if t < 360 else 0  # noqa: E731
+    rate = lambda t: sum(users(max(0, t - k)) for k in range(60)) / 60 * 0.7     # noqa: E731
+    after = []
+    for t in range(0, 900, 15):
+        f.observe(rate(t))
+        if t == 210:
+            assert f.level() == Level.L2          # the surge itself is still caught
+        if t >= 375:
+            after.append(f.level())
+    assert set(after) == {Level.L0}
+
+
 def test_traffic_level_thresholds():
     f = TrafficForecaster(0.5, 0.3, 4, x=2, y=4)
     for _ in range(30):
