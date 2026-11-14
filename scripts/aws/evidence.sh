@@ -28,7 +28,7 @@ run nodes.txt kubectl get nodes -o wide
 run version.txt kubectl version
 run lifeboat-pods.txt kubectl -n lifeboat get pods -o wide
 run demo-pods.txt kubectl -n lifeboat-demo get deploy,jobs,pods -o wide
-run secrets-encrypt.txt ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "ubuntu@$EIP" sudo k3s secrets-encrypt status
+run secrets-encrypt.txt ssh -i "$SSH_KEY" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=accept-new "ubuntu@$EIP" sudo k3s secrets-encrypt status
 # shellcheck disable=SC2086,SC2016  # backticks are a JMESPath literal, not shell
 run ec2-instances.txt aws ec2 describe-instances --instance-ids $INSTANCES --output table \
   --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,Id:InstanceId,Type:InstanceType,State:State.Name,AZ:Placement.AvailabilityZone,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress}'

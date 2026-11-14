@@ -9,20 +9,23 @@
 #
 # Settings (env): AWS_REGION (us-east-1), INSTANCE_TYPE (t3.large), KEY_NAME (vockey),
 #   INSTANCE_PROFILE (LabInstanceProfile), ALLOW_CIDR (your public IP/32: who may reach ssh, the
-#   Kubernetes API and NodePorts; add teammates as "a.b.c.d/32,e.f.g.h/32").
+#   Kubernetes API and NodePorts; add teammates as "a.b.c.d/32,e.f.g.h/32"), CLUSTER_NAME (lifeboat:
+#   prefix for the instance, SG and bucket names; not NAME, which WSL sets to the user's name),
+#   SSH_PORT (22; use 443 on networks that block outbound ssh: every node's sshd also listens on 443).
 # Writes .aws-cluster.env (state for the other scripts) and kubeconfig-aws.yaml. Both gitignored.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
-NAME="${NAME:-lifeboat}"
+NAME="${CLUSTER_NAME:-lifeboat}"
 TYPE="${INSTANCE_TYPE:-t3.large}"
 KEY="${KEY_NAME:-vockey}"
 PROFILE="${INSTANCE_PROFILE:-LabInstanceProfile}"
 SSH_KEY="${SSH_KEY:?set SSH_KEY to the .pem for key pair $KEY (Learner Lab: labsuser.pem)}"
 K3S_VERSION="${INSTALL_K3S_VERSION:-v1.31.4+k3s1}"
+SSH_PORT="${SSH_PORT:-22}"
 STATE=.aws-cluster.env
-SSH=(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+SSH=(ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
 
 [[ -f "$STATE" ]] && { echo "$STATE exists: a cluster is already up. Run scripts/aws/down.sh first." >&2; exit 1; }
 aws sts get-caller-identity >/dev/null 2>&1 || {
@@ -32,6 +35,7 @@ ALLOW_CIDR="${ALLOW_CIDR:-$(curl -s https://checkip.amazonaws.com)/32}"
 
 save() { echo "$1=\"$2\"" >> "$STATE"; }   # written as we go, so down.sh can clean up a half-finished run
 save REGION "$AWS_DEFAULT_REGION"
+save SSH_PORT "$SSH_PORT"
 
 echo "== finding Ubuntu 24.04 AMI"
 AMI="$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
@@ -52,7 +56,7 @@ aws ec2 create-tags --resources "$SG" --tags "Key=Project,Value=$NAME"
 aws ec2 authorize-security-group-ingress --group-id "$SG" --protocol -1 --source-group "$SG" >/dev/null   # node to node
 IFS=',' read -r -a cidrs <<< "$ALLOW_CIDR"
 for cidr in "${cidrs[@]}"; do
-  for port in 22 6443 30000-32767; do
+  for port in 22 443 6443 30000-32767; do
     aws ec2 authorize-security-group-ingress --group-id "$SG" --protocol tcp --port "$port" --cidr "$cidr" >/dev/null
   done
 done
@@ -82,6 +86,10 @@ userdata() {   # $1 = extra k3s args
   cat <<EOF
 #!/bin/bash
 set -eux
+# sshd on 443 as well as 22: some networks (campus, hotel) drop outbound port 22
+mkdir -p /etc/systemd/system/ssh.socket.d
+printf '[Socket]\nListenStream=\nListenStream=0.0.0.0:22\nListenStream=[::]:22\nListenStream=0.0.0.0:443\n' > /etc/systemd/system/ssh.socket.d/port443.conf
+systemctl daemon-reload && systemctl restart ssh.socket
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION K3S_TOKEN=$TOKEN sh -s - server \\
   --disable traefik --write-kubeconfig-mode 644 --secrets-encryption --tls-san $EIP $1
 EOF
@@ -134,7 +142,7 @@ cat <<EOF
 AWS cluster is up.
   export KUBECONFIG=\$PWD/kubeconfig-aws.yaml
   # in .env: S3_MODE=aws  and  LIFEBOAT_S3_BUCKET=$BUCKET
-  source .aws-cluster.env && SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new" NODES="\$NODES" make import
+  source .aws-cluster.env && SSH_OPTS="-i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=accept-new" NODES="\$NODES" make import
   make deploy monitoring workloads wait
 When you are done for the day: scripts/aws/stop.sh   (or scripts/aws/down.sh to delete everything)
 EOF

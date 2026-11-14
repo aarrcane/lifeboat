@@ -18,7 +18,7 @@ NODES="${NODES% }"
 sed -i.bak '/^NODES=/d' "$STATE" && rm -f "$STATE.bak"
 echo "NODES=\"$NODES\"" >> "$STATE"
 
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "ubuntu@$EIP" 'sudo cat /etc/rancher/k3s/k3s.yaml' \
+ssh -i "$SSH_KEY" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=accept-new "ubuntu@$EIP" 'sudo cat /etc/rancher/k3s/k3s.yaml' \
   | sed -e "s|https://127.0.0.1:6443|https://$EIP:6443|" -e 's|: default$|: lifeboat-aws|' > kubeconfig-aws.yaml
 chmod 600 kubeconfig-aws.yaml
 echo "NODES=$NODES"
