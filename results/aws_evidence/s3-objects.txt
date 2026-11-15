@@ -1,0 +1,20 @@
+$ bash -c aws s3 ls 's3://lifeboat-checkpoints-521155896250' --recursive | head -n 50
+# 2026-11-15T05:20:42Z
+2026-11-15 13:15:01         13 c3-analytics/data-1794719700.987.json
+2026-11-15 13:15:32         14 c3-analytics/data-1794719731.030.json
+2026-11-15 13:16:02         14 c3-analytics/data-1794719761.041.json
+2026-11-15 13:16:32         14 c3-analytics/data-1794719791.099.json
+2026-11-15 13:17:02         14 c3-analytics/data-1794719821.101.json
+2026-11-15 13:17:12         14 c3-analytics/data-1794719831.871.json
+2026-11-15 13:17:13         14 c3-analytics/data-1794719832.797.json
+2026-11-15 13:17:13         72 c3-analytics/latest.json
+2026-11-15 13:15:02         13 c4-backup/data-1794719701.637.json
+2026-11-15 13:15:24         14 c4-backup/data-1794719723.595.json
+2026-11-15 13:15:25         14 c4-backup/data-1794719724.160.json
+2026-11-15 13:15:25         71 c4-backup/latest.json
+2026-11-15 13:14:31         78 events/c3-analytics/1794719670.892-start.json
+2026-11-15 13:17:13         79 events/c3-analytics/1794719832.760-term.json
+2026-11-15 13:14:32         74 events/c4-backup/1794719671.568-start.json
+2026-11-15 13:15:25         77 events/c4-backup/1794719724.133-term.json
+2026-11-15 13:17:12         26 requests/c3-analytics.json
+2026-11-15 13:15:24         26 requests/c4-backup.json

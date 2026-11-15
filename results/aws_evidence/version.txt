@@ -1,0 +1,5 @@
+$ kubectl version
+# 2026-11-15T05:20:33Z
+Client Version: v1.31.4
+Kustomize Version: v5.4.2
+Server Version: v1.31.4+k3s1

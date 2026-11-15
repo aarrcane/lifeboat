@@ -1,0 +1,34 @@
+$ kubectl -n lifeboat-demo get deploy,jobs,pods -o wide
+# 2026-11-15T05:20:35Z
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                      SELECTOR
+deployment.apps/c1-emergency   20/20   20           20          6m9s   web          lifeboat/webapp:latest      app=c1-emergency
+deployment.apps/c2-portal      0/2     2            0           6m9s   web          lifeboat/webapp:latest      app=c2-portal
+deployment.apps/placeholder    0/0     0            0           6m8s   pause        registry.k8s.io/pause:3.9   app=placeholder
+
+NAME                     STATUS      COMPLETIONS   DURATION   AGE    CONTAINERS   IMAGES                   SELECTOR
+job.batch/c3-analytics   Suspended   0/1           6m9s       6m9s   worker       lifeboat/worker:latest   batch.kubernetes.io/controller-uid=047286c1-87d4-4433-9af1-f9eeb598cb8b
+job.batch/c4-backup      Suspended   0/1           6m8s       6m8s   worker       lifeboat/worker:latest   batch.kubernetes.io/controller-uid=d162c9a9-b6e6-4330-b0e5-35c04eb85a77
+
+NAME                                READY   STATUS    RESTARTS   AGE     IP            NODE               NOMINATED NODE   READINESS GATES
+pod/c1-emergency-55fb66dd74-2c6cd   1/1     Running   0          2m18s   10.42.0.161   ip-172-31-38-206   <none>           <none>
+pod/c1-emergency-55fb66dd74-4g9zv   1/1     Running   0          2m38s   10.42.1.138   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-52zz2   1/1     Running   0          2m19s   10.42.1.139   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-7tq6k   1/1     Running   0          6m10s   10.42.1.132   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-8nxpw   1/1     Running   0          2m18s   10.42.0.163   ip-172-31-38-206   <none>           <none>
+pod/c1-emergency-55fb66dd74-b4p27   1/1     Running   0          3m59s   10.42.1.136   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-ckbfv   1/1     Running   0          2m38s   10.42.3.168   ip-172-31-47-127   <none>           <none>
+pod/c1-emergency-55fb66dd74-fcctm   1/1     Running   0          2m19s   10.42.3.169   ip-172-31-47-127   <none>           <none>
+pod/c1-emergency-55fb66dd74-g7gt9   1/1     Running   0          5m14s   10.42.0.155   ip-172-31-38-206   <none>           <none>
+pod/c1-emergency-55fb66dd74-g7rwc   1/1     Running   0          2m18s   10.42.3.170   ip-172-31-47-127   <none>           <none>
+pod/c1-emergency-55fb66dd74-l4bbl   1/1     Running   0          2m18s   10.42.1.141   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-mr7df   1/1     Running   0          2m18s   10.42.1.140   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-qdbsm   1/1     Running   0          6m10s   10.42.3.162   ip-172-31-47-127   <none>           <none>
+pod/c1-emergency-55fb66dd74-qt5xk   1/1     Running   0          3m59s   10.42.0.158   ip-172-31-38-206   <none>           <none>
+pod/c1-emergency-55fb66dd74-qtrd7   1/1     Running   0          2m18s   10.42.3.171   ip-172-31-47-127   <none>           <none>
+pod/c1-emergency-55fb66dd74-rqj5n   1/1     Running   0          2m18s   10.42.0.162   ip-172-31-38-206   <none>           <none>
+pod/c1-emergency-55fb66dd74-t4x79   1/1     Running   0          3m59s   10.42.3.167   ip-172-31-47-127   <none>           <none>
+pod/c1-emergency-55fb66dd74-thwzq   1/1     Running   0          2m19s   10.42.0.160   ip-172-31-38-206   <none>           <none>
+pod/c1-emergency-55fb66dd74-x4mrh   1/1     Running   0          2m18s   10.42.1.142   ip-172-31-46-23    <none>           <none>
+pod/c1-emergency-55fb66dd74-xsbtk   1/1     Running   0          4m27s   10.42.0.156   ip-172-31-38-206   <none>           <none>
+pod/c2-portal-f5f8578-72llp         0/1     Pending   0          2m17s   <none>        <none>             <none>           <none>
+pod/c2-portal-f5f8578-hjzlx         0/1     Pending   0          2m16s   <none>        <none>             <none>           <none>

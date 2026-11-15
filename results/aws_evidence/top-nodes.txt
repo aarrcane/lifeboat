@@ -1,0 +1,6 @@
+$ kubectl top nodes
+# 2026-11-15T05:20:47Z
+NAME               CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+ip-172-31-38-206   223m         11%    2388Mi          30%       
+ip-172-31-46-23    333m         16%    1767Mi          22%       
+ip-172-31-47-127   174m         8%     2053Mi          26%       

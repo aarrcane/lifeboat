@@ -1,0 +1,6 @@
+$ kubectl get nodes -o wide
+# 2026-11-15T05:20:32Z
+NAME               STATUS   ROLES                       AGE     VERSION        INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION   CONTAINER-RUNTIME
+ip-172-31-38-206   Ready    control-plane,etcd,master   2d22h   v1.31.4+k3s1   172.31.38.206   <none>        Ubuntu 24.04.5 LTS   7.0.0-1017-aws   containerd://1.7.23-k3s2
+ip-172-31-46-23    Ready    control-plane,etcd,master   2d22h   v1.31.4+k3s1   172.31.46.23    <none>        Ubuntu 24.04.5 LTS   7.0.0-1014-aws   containerd://1.7.23-k3s2
+ip-172-31-47-127   Ready    control-plane,etcd,master   2d22h   v1.31.4+k3s1   172.31.47.127   <none>        Ubuntu 24.04.5 LTS   7.0.0-1014-aws   containerd://1.7.23-k3s2

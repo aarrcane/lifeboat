@@ -1,0 +1,11 @@
+$ aws ec2 describe-instances --instance-ids i-0d85c98d09f4f357a i-05f343a719f523cd3 i-0096522038b866af7 --output table --query Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,Id:InstanceId,Type:InstanceType,State:State.Name,AZ:Placement.AvailabilityZone,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress}
+# 2026-11-15T05:20:40Z
+----------------------------------------------------------------------------------------------------------------------
+|                                                  DescribeInstances                                                 |
++------------+----------------------+--------------------+----------------+-----------------+-----------+------------+
+|     AZ     |         Id           |       Name         |   PrivateIp    |    PublicIp     |   State   |   Type     |
++------------+----------------------+--------------------+----------------+-----------------+-----------+------------+
+|  us-east-1d|  i-05f343a719f523cd3 |  lifeboat-server-2 |  172.31.46.23  |  34.230.49.0    |  running  |  t3.large  |
+|  us-east-1d|  i-0d85c98d09f4f357a |  lifeboat-server-1 |  172.31.38.206 |  32.200.58.206  |  running  |  t3.large  |
+|  us-east-1d|  i-0096522038b866af7 |  lifeboat-server-3 |  172.31.47.127 |  54.227.106.151 |  running  |  t3.large  |
++------------+----------------------+--------------------+----------------+-----------------+-----------+------------+

@@ -1,0 +1,8 @@
+E3EVENT {"kind": "start", "name": "c3-analytics", "ts": 1794725074.2106354, "unit": 0}
+E3EVENT {"kind": "start", "name": "c4-backup", "ts": 1794725074.7856507, "unit": 0}
+E3EVENT {"kind": "term", "name": "c4-backup", "ts": 1794725128.028456, "unit": 1045}
+E3EVENT {"kind": "start", "name": "c4-backup", "ts": 1794725240.3676026, "unit": 1045}
+E3EVENT {"kind": "term", "name": "c4-backup", "ts": 1794725369.5690978, "unit": 3544}
+E3EVENT {"kind": "term", "name": "c3-analytics", "ts": 1794725449.6166804, "unit": 7379}
+E3EVENT {"kind": "start", "name": "c3-analytics", "ts": 1794725881.3785183, "unit": 7379}
+E3EVENT {"kind": "start", "name": "c4-backup", "ts": 1794725881.9853873, "unit": 3544}

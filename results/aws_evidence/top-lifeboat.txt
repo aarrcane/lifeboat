@@ -1,0 +1,4 @@
+$ kubectl -n lifeboat top pod
+# 2026-11-15T05:20:48Z
+NAME                       CPU(cores)   MEMORY(bytes)   
+lifeboat-d988c6c96-xfgln   18m          118Mi           
