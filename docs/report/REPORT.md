@@ -192,8 +192,7 @@ first, and re-ran all 12 runs.
 
 **The warning buys speed.** Lifeboat entered the surge with 7 pods instead of 2, and reached
 full capacity **86 s sooner than the standard autoscaler** and 20 s sooner than the same
-controller without warnings. The autoscaler is slow because it only reacts once CPU is already
-maxed out.
+controller without warnings.
 
 **But a 20× surge still hurts.** No setup kept every request under 0.5 s: the first part of the
 surge is rough while the last pods start. Lifeboat served the same share of requests in time as
@@ -249,9 +248,7 @@ kept its pods during the handover. Lifeboat itself is light: 20–26 millicores 
 
 These systems either react once overload has happened, or plan around resources over hours.
 None uses *outside* warnings to act ahead of a surge. Our B0 baseline is exactly what Kubernetes
-offers today, and to be fair, it does get there in the end: it reached full capacity
-in every run. But it took 86 s longer on average, and because it never pauses batch work, the citizen portal
-almost completely failed.
+offers today; it does get there in every run, just 86 s later.
 
 ## 6. Conclusions and future work
 
@@ -264,6 +261,21 @@ shorten the bad part and put the emergency service first in line.
 
 Our main lesson is that a warning only helps if everything that acts on it already knows what
 "normal" looks like: a freshly restarted Lifeboat prepared 4 pods instead of 7.
+
+**Beyond floods: any disaster, anywhere.** We used floods because they are
+Singapore's real risk, but nothing in Lifeboat is flood-specific. The voter simply counts signed readings
+from *any* named source, so a new hazard only needs a small feed that turns a public warning
+into a level. As a proof of concept we wrote one for earthquakes (`feeds/usgs_quake.py`, unit
+tested but not deployed or evaluated). Other regions could plug in their own:
+
+| Hazard | Public feed | L1 Watch | L2 Emergency |
+| --- | --- | --- | --- |
+| Earthquake | USGS live quake feed | magnitude 5+ within 300 km | magnitude 6.5+, or USGS tsunami flag |
+| Tsunami | national tsunami warning centres | tsunami watch | tsunami warning |
+| Hurricane / typhoon | US NHC, Japan JMA advisories | storm within 72 h | landfall within 24 h |
+
+The safety rule stays the same everywhere: one feed alone can only reach L1, so a quake alert
+still needs a second kind of evidence, such as the traffic forecast, before anything is paused.
 
 **Limits and future work.** We tested one small cluster, synthetic workloads, a fixed 60-second
 warning and 3 runs per setup, and no real flood happened during the project, so warnings were
@@ -285,18 +297,33 @@ and use Holt-Winters to learn daily traffic patterns.
 ## References
 
 [1] Kubernetes: Pod Priority and Preemption. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+
 [2] Kubernetes Jobs: Suspending a Job. https://kubernetes.io/docs/concepts/workloads/controllers/job/#suspending-a-job
+
 [3] Kubernetes: Overprovision Node Capacity For A Cluster. https://kubernetes.io/docs/tasks/administer-cluster/node-overprovisioning/
+
 [4] KEDA Metrics API scaler. https://keda.sh/docs/2.20/scalers/metrics-api/
+
 [5] Karpenter. https://karpenter.sh/
+
 [6] PUB Flood Alerts across Singapore (data.gov.sg). https://data.gov.sg/datasets/d_f1404e08587ce555b9ea3f565e2eb9a3/view
+
 [7] NEA Rainfall across Singapore (data.gov.sg). https://data.gov.sg/datasets/d_6580738cdd7db79374ed3152159fbd69/view
+
 [8] Hyndman & Athanasopoulos, Forecasting: Principles and Practice, 3rd ed., §8.2 (Holt linear trend). https://otexts.com/fpp3/holt.html
+
 [9] Kubernetes: Leases. https://kubernetes.io/docs/concepts/architecture/leases/
+
 [10] K3s datastore options. https://docs.k3s.io/datastore
+
 [11] Kueue: preemption, suspend and requeue. https://kueue.sigs.k8s.io/docs/concepts/preemption/
+
 [12] Agrawal & Jyothi, Cooperative Graceful Degradation in Containerized Clouds, ASPLOS '25. https://doi.org/10.1145/3669940.3707244
+
 [13] GreenScale pitch presentation (AY25/26 Dell Cloud Native Award, CSC3104).
+
 [14] Verma et al., Large-scale cluster management at Google with Borg, EuroSys 2015.
+
 [15] Meza et al., Defcon: Preventing Overload with Graceful Feature Degradation, OSDI '23.
+
 [16] Netflix TechBlog: Enhancing Netflix Reliability with Service-Level Prioritized Load Shedding.
