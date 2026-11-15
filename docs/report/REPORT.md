@@ -249,8 +249,8 @@ kept its pods during the handover. Lifeboat itself is light: 20–26 millicores 
 
 These systems either react once overload has happened, or plan around resources over hours.
 None uses *outside* warnings to act ahead of a surge. Our B0 baseline is exactly what Kubernetes
-offers today, and to be fair, it does get there in the end: in 2 out of 3 runs it reached full
-capacity. But it took 86 s longer, and because it never pauses batch work, the citizen portal
+offers today, and to be fair, it does get there in the end: it reached full capacity
+in every run. But it took 86 s longer on average, and because it never pauses batch work, the citizen portal
 almost completely failed.
 
 ## 6. Conclusions and future work
