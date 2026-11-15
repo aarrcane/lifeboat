@@ -45,6 +45,16 @@ SYS, DEMO = "lifeboat", "lifeboat-demo"
 SCENARIO = "data/scenario_experiment.jsonl"
 STAGES = "150:10,330:200,360:10"
 SURGE_START, SURGE_END, LOAD_END = 150, 330, 360
+# Normal traffic runs this long before t = 0. Lifeboat is restarted 75 s into it (a full
+# rate[1m] window of normal traffic), so its forecast baseline learns real normal traffic
+# instead of the zeros Prometheus reports before Locust starts. Without this the L2 pre-size
+# used a baseline of about 2.5 req/s instead of 6 (4 C1 pods instead of 7).
+WARM_S, LIFEBOAT_RESTART_AT_S = 210, 75
+
+
+def shifted(stages: str, by: int) -> str:
+    """Locust STAGES with every end time moved `by` seconds later (the warm-up phase)."""
+    return ",".join(f"{int(e) + by}:{u}" for e, u in (p.split(":") for p in stages.split(",")))
 RECOVERY_WAIT_S = 480                  # after t = 330: at most this long for the workloads to be back
 C1_PEAK_RPS, COST_MILLIS_PER_RPS, POD_MILLIS = 120, 20, 250
 C1_NEEDED = math.ceil(C1_PEAK_RPS * COST_MILLIS_PER_RPS / POD_MILLIS)   # 10 ready pods = capacity
@@ -143,19 +153,36 @@ def prepare(setup: str) -> None:
 
 
 def start(setup: str) -> float:
-    """Start Locust, take t0 when its container is running, then start the replay."""
+    """Start Locust with a warm-up phase of normal traffic, restart Lifeboat during it so it
+    learns that traffic, take t0 WARM_S after Locust started, then start the replay."""
     print(f"[{setup}] start")
     kubectl("-n", SYS, "delete", "job", "locust", "replay", "--ignore-not-found", "--wait=true")
-    create_from("deploy/jobs/locust.yaml", __STAGES__=STAGES)
+    create_from("deploy/jobs/locust.yaml", __STAGES__=shifted(STAGES, WARM_S))
 
     def locust_running():
         pods = kjson("-n", SYS, "get", "pods", "-l", "job-name=locust").get("items", [])
         return any(p.get("status", {}).get("phase") == "Running" for p in pods)
     wait_until("Locust running", locust_running, 180, every=0.5)
+    t_locust = time.time()
+    if SETUPS[setup]["lifeboat"]:
+        pause(LIFEBOAT_RESTART_AT_S - (time.time() - t_locust))
+        kubectl("-n", SYS, "rollout", "restart", "deploy/lifeboat")
+        kubectl("-n", SYS, "rollout", "status", "deploy/lifeboat", "--timeout=120s")
+    left = WARM_S - (time.time() - t_locust)
+    if left < 60 and not DRY:
+        print(f"  warning: only {left:.0f} s of warm-up left after the Lifeboat restart")
+    pause(left)
     t0 = time.time()
     if SETUPS[setup]["replay"]:
         create_from("deploy/jobs/replay.yaml", __SCENARIO__=SCENARIO, __SPEED__="1")
     return t0
+
+
+def pause(seconds: float) -> None:
+    if DRY:
+        print(f"  (sleep {max(0, seconds):.0f} s)")
+    elif seconds > 0:
+        time.sleep(seconds)
 
 
 # ---------------------------------------------------------------- sampling
