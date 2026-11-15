@@ -25,11 +25,11 @@ kubectl -n monitoring port-forward svc/kps-grafana 3000:80     # Grafana at http
 | 1 | 0:00 | Title + problem | none | proposal Figure 1 | "Lifeboat makes room for emergency services before a flood surge, not after." |
 | 2 | 0:30 | Normal | none | Alert level L0, RPS flat, C1 p95 well under 0.5 s, C3/C4 running | "Normal day: everything runs, including analytics and backups." |
 | 3 | 1:00 | Flood replay starts | `make demo` | S2 NEA vote goes to L1, **Alert level L1**, annotation "LifeboatLevelChanged" | "NEA reports heavy rain. One source is enough for L1: the backup pauses and one extra C1 pod starts." |
-| 4 | 1:40 | Second source agrees | (replay continues) | S1 PUB joins, **L2**, plan steps appear, C3 checkpoints then pauses, placeholder pods go | "PUB confirms. Two of three agree: L2. Analytics saves a checkpoint, then pauses; C1 is sized from the forecast." |
-| 5 | 2:20 | Surge arrives | (Locust in `make demo`) | RPS climbs, forecast ratio crosses the Y line, S3 votes too; C1 p95 stays under target | "The traffic arrives after the room was made, and C1 stays fast." |
+| 4 | 1:40 | Second source agrees | (replay continues) | S1 PUB joins, **L2**, plan steps appear, C3 checkpoints then pauses, placeholder pods go | "PUB confirms. Two of three agree: L2. Analytics saves a checkpoint, then pauses, and C1 grows to 7 pods before any extra traffic." |
+| 5 | 2:20 | Surge arrives | (Locust in `make demo`) | RPS climbs, forecast ratio crosses the Y line, S3 votes too; C1 p95 rises, L3 adds pods | "The traffic arrives after the room was made. A 20x surge still hurts at first, but on AWS C1 reached full capacity in 77 s, against 163 s for an autoscaler." |
 | 6 | 2:50 | Kill the active executor | `kubectl -n lifeboat delete pod <holder> --grace-period=0 --force` | Lease holder changes, takeover number +1, **no LifeboatNoActiveExecutor alert**, plan steps still complete | "We crash the active executor mid-triage. The standby takes the Lease with a higher takeover number and finishes the plan." |
 | 7 | 3:40 | Recovery | (replay ends) | votes drop, level steps down one per calm period, C3/C4 resume from checkpoint | "When the warnings stop, Lifeboat waits for a calm period and steps down slowly." |
-| 8 | 4:20 | Restore + results | `python scripts/plot_results.py` | E1–E5 figures | "Everything is back at its original settings. Here's how it compares with B0 to B2." |
+| 8 | 4:20 | Restore + results | `python scripts/plot_results.py` | E1–E5 figures | "Everything is back at its original settings. Measured on AWS, 3 runs each: full capacity 77 s into the surge against 163 s for HPA, p95 2.9 s against 5 s, no batch work lost, and takeover in 17 s." |
 
 ## Tips
 

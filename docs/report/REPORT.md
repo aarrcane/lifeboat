@@ -11,13 +11,17 @@ CSC3104 Cloud and Distributed Computing, Final Report, Group 21
 
 Shared Kubernetes clusters protect critical services only after the cluster is already under
 pressure: pod priority evicts lower-priority pods once an emergency pod is stuck waiting, and
-autoscalers react in minutes. During a Singapore flash flood, PUB flood alerts and NEA rainfall
+an autoscaler reacts only once CPU is already saturated (on our AWS cluster a CPU-based
+HPA took 163 s on average to give the emergency service enough pods for a 20× surge). During a Singapore flash flood, PUB flood alerts and NEA rainfall
 readings arrive *before* citizens flood the emergency websites, but that warning time is wasted.
 Lifeboat is a small controller that turns three unreliable warning sources (PUB, NEA, and a
 forecast of cluster traffic) into a severity level through a 2-of-3 vote, plans which batch
 work to pause by how little progress would be lost, and carries the plan out with an
-active/standby executor that survives its own crash mid-triage. TODO (all): one sentence with
-the headline E1 result once the AWS run is done.
+active/standby executor that survives its own crash mid-triage. On a three-server k3s cluster on
+AWS, with a 60 s flood warning, Lifeboat had 7 emergency pods ready when a 20× surge began and
+reached full capacity 77 s into it, against 163 s for HPA + pod priority and 97 s for the same
+controller without warnings; C1's 95th-percentile latency fell from 5.0 s (the client timeout)
+to 2.9 s, and no batch work was lost.
 
 ## 1. Introduction
 
@@ -201,7 +205,16 @@ Algorithm 2 (`lifeboat/planner.py`) turns a level into steps:
 - **L3:** pause everything pausable, add three C1 pods, and switch off C2's extra features
   through a ConfigMap.
 
-TODO (P3): worked example and tuning of `cost_millis_per_rps`.
+**Worked example.** The web app burns 20 ms of CPU per request (`BURN_MS`) and each C1 pod has a
+250m CPU limit, so one pod serves at most 12.5 requests/s; `cost_millis_per_rps` = 20 follows
+directly. In the experiment, normal C1 traffic is 6 requests/s (6 of the 10 normal users) and
+the surge peak is 120 requests/s (120 of 200). At L1 the plan only adds one pod (2 → 3). At L2
+the pre-size rule sizes C1 for 10 × 6 = 60 requests/s: 60 × 20 + 500 = 1700m, or 7 pods, before
+any surge traffic exists. When the surge arrives the planner sizes for the observed rate, capped
+at 1.25× (the Holt forecast alone predicted 339 requests/s for a true 120): at 120 requests/s,
+120 × 20 + 500 = 2900m, or 12 pods. Ten pods (2400m) is the bare capacity used by E1. The
+ratchet keeps C1 at its largest target until the plan is emptied at L0. The two freed placeholder
+pods and the paused C3/C4 jobs cover that CPU on three 2-vCPU nodes.
 
 ### 4.5 Executor, TriagePlan and takeover (P3)
 
@@ -210,14 +223,17 @@ replica holds a Kubernetes Lease [17] (15 s). Before acting it writes the plan a
 workload's original settings to a TriagePlan custom resource in etcd. Each step sets a target
 state (Job `suspend: true`, Deployment replicas, ConfigMap data), so repeating it changes
 nothing. A new holder stamps a higher takeover number into the plan; writes carrying an older
-number are rejected (compare-and-swap), so a stale executor cannot interfere. TODO (P3): figure
-and E5 discussion.
+number are rejected (compare-and-swap), so a stale executor cannot change the plan. In the worst case it finishes one step it had already
+started; every step sets a target state, and the new executor's reconcile loop corrects any
+drift on its next tick. E5 (Section 6.5) measures the takeover on AWS.
 
 ### 4.6 Checkpointing (P3)
 
 Data first, `latest.json` last, so a checkpoint only counts once fully uploaded; the executor
 asks a workload to save (`requests/<name>.json`) and waits up to 6 s before pausing. Checkpoints
-go to MinIO on laptops and Amazon S3 on AWS. TODO (P3).
+go to MinIO on laptops and Amazon S3 on AWS. A worker also saves when it gets SIGTERM
+(`SAVE_ON_TERM`) and then exits non-zero, so a Job that is deleted or preempted is never marked
+Complete by mistake. E3 (Section 6.3) measures the work lost.
 
 ## 5. Implementation and cloud-native setup (P4)
 
@@ -310,14 +326,21 @@ live data, not recordings of a real flood. The two are never mixed in one run: t
 only the latest reading per source, so a live L0 would cancel a replayed L2, and `make replay`
 therefore stops the live feeds first.
 
-All experiments replay the same scripted Singapore flash flood (`data/scenario_flash_flood.jsonl`)
-while Locust sends a ~20× traffic surge at C1 and C2 and C3/C4 jobs run. Baselines on the same
+E1 to E3 replay the same scripted warning (`data/scenario_experiment.jsonl`: NEA heavy rain at
+t = 75 s, PUB and NEA at L2 from t = 90 s to 330 s) while Locust sends a 20× surge from t = 150 s
+to 330 s (10 → 200 users, one request per second each, 60 % to C1 and 40 % to C2) and the C3/C4
+jobs run. So the warning leads the surge by 60 s. A request counts as served only if it returns
+200 within the 0.5 s target; the client gives up after 5 s. Before t = 0, every run gets 210 s of
+normal traffic, and Lifeboat is restarted 75 s into it, so its forecaster has learned normal
+traffic. A first matrix without this warm-up (kept in `results/archive/aws-cold-start-14nov/`)
+had learned zeros from the idle cluster and pre-sized only 4 C1 pods, not 7. Baselines on the same
 workloads: **B0** a HorizontalPodAutoscaler on C1 (CPU 70 %, 2 to 20 pods) plus pod priority, which
 is what Kubernetes gives you out of the box; **B1** B0 + spare room (placeholder pods); **B2**
 Lifeboat reacting only to measured distress (early warnings off). The HPA is not deployed next to
 Lifeboat, since two controllers writing C1's replicas would fight. All four setups share the same
-cool-down: HPA scale-down window 60 s, `LIFEBOAT_CALM_MINUTES=1`. Each setup runs 3 times
-**[pending: AWS EC2]**. Figures are produced by `scripts/plot_results.py` from the CSVs in
+cool-down: HPA scale-down window 60 s, `LIFEBOAT_CALM_MINUTES=1`. Each setup ran 3 times, interleaved (B0, B1, B2, Lifeboat, then again), on the AWS cluster of
+Section 5 (`make experiment SETUP=all RUNS=3`, run on server-1 on 15 Nov 2026; per-second
+timelines and Locust logs in `results/runs/`). Figures are produced by `scripts/plot_results.py` from the CSVs in
 `results/` (formats in `docs/RESULTS_FORMAT.md`).
 
 ### 6.2 E1 time to capacity and E2 service quality (P5)
@@ -325,18 +348,56 @@ cool-down: HPA scale-down window 60 s, `LIFEBOAT_CALM_MINUTES=1`. Each setup run
 ![E1](../../results/figures/e1_time_to_capacity.png)
 ![E2](../../results/figures/e2_service_quality.png)
 
-Current numbers come from P5's baseline model (`results/model/e1_e2_model.csv`, a model prediction, not measured), not yet a cluster
-run **[pending]**. TODO (P5): replace with 3 cluster runs per setup.
+![E1 timeline](../../results/figures/e1_timeline.png)
+
+Measured on AWS, mean of 3 runs (range in brackets), from `results/e1_e2_summary.csv`:
+
+| Setup | C1 pods ready at surge | E1: surge to 10 ready C1 pods | C1 requests within 0.5 s | C1 p50 | C1 p95 | C2 within 0.5 s |
+| --- | --- | --- | --- | --- | --- | --- |
+| B0 HPA + pod priority | 2 | 163 s (123–184) | 33 % (29–40) | 1.18 s | 5.0 s | 0.3 % |
+| B1 B0 + spare room | 2 | 171 s (155–186), 1 run never | 29 % (21–38) | 1.58 s | 5.0 s | 0.3 % |
+| B2 Lifeboat, no warnings | 2 | 97 s (87–102) | 47 % (46–48) | 0.55 s | 3.9 s | 41 % |
+| **Lifeboat** | **7** | **77 s (76–79)** | **47 % (46–49)** | **0.54 s** | **2.9 s** | **41 %** |
+
+**E1.** With the warning, Lifeboat started the surge with 7 ready C1 pods instead of 2 and had
+full capacity 77 s into it: 86 s sooner than HPA + pod priority and 20 s sooner than the same
+controller reacting only to measured distress. The extra C1 pods for the first alert were ready
+4–6 s after it. The HPA is slower because it reacts only once CPU is saturated and then waits for the
+metrics window; in one B1 run it did not reach 10 ready pods before the surge ended.
+
+**E2.** No setup kept C1 under 0.5 s for a whole 20× surge on six vCPUs: every setup loses the
+first part of the surge while pods start. Lifeboat and B2 served the same share of C1 requests
+in time (47 %); the warning shows in the tail, not the median: C1's p95 was 2.9 s with Lifeboat
+against 3.9 s for B2 and 5.0 s (the client timeout) for both HPA baselines. B0 and B1 also let C2
+fail almost completely (0.3 %), because C2 has no autoscaler and nothing pauses the batch jobs,
+while Lifeboat and B2 kept 41 % of C2 within the target by pausing C3/C4 and, at L3, switching
+off C2's extra features.
 
 ### 6.3 E3 work saved (P3)
 
-**[pending]** `results/e3_work_saved.csv`. TODO (P3).
+![E3](../../results/figures/e3_work_saved.png)
+
+From `results/e3_work_saved.csv` (3 runs per setup):
+
+| Setup | C3/C4 paused? | Progress lost | Paused for (until resumed) |
+| --- | --- | --- | --- |
+| B0, B1 | no (HPA does not touch batch work) | 0 s | – |
+| B2 | yes, at L3 | 0 s in all runs | 253–258 s |
+| Lifeboat | yes, at L2/L3 | 0 s in all runs | 255–261 s |
+
+Every pause went through the checkpoint contract: the executor asked for a save, the worker
+wrote its data and then `latest.json`, and the resumed Job continued from that unit, so no work
+was repeated. The pause lasted as long as the crisis plus one calm period
+(`LIFEBOAT_CALM_MINUTES=1`) per level stepped down. One B1 run records a 35 s restore for C4
+although nothing paused it; we did not find the cause. We did not run the `SAVE_ON_TERM=false`
+case (an application that ignores the save request), which would lose up to one checkpoint
+interval.
 
 ### 6.4 E4 alert accuracy (P2, P6)
 
 ![E4](../../results/figures/e4_alert_accuracy.png)
 
-Four recorded replays through the real voter (`python scripts/export_e4.py`):
+Four scripted scenarios through the real voter (`python scripts/export_e4.py`):
 
 | Scenario | Real crisis? | Naive (any 1 source) false L2 | Lifeboat (2 of 3) false L2 | Lifeboat peak |
 | --- | --- | --- | --- | --- |
@@ -382,10 +443,24 @@ first increment.
 
 ### 6.5 E5 crash tests (P3, P6)
 
-**[pending]** Run `scripts/e5_crash_test.py` during a replay: kill the active executor (once and
-3× back to back), measure takeover time, steps left half done, steps drifted from the plan,
-takeover increment, and Lifeboat's own CPU/memory. Unit and `make itest` results already cover
-the Figure 2 scenario. TODO (P3).
+![E5](../../results/figures/e5_crash_tests.png)
+
+`scripts/e5_crash_test.py` force-killed the active executor (`--grace-period=0 --force`) three
+times during a `make demo` run on AWS, each time while a plan of 5 steps was in force
+(`results/e5_crash.csv`):
+
+| Kill | Takeover time | Takeover number | Level before → after | Steps half done | Steps drifted | Plan kept |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 17.6 s | +1 | L2 → L3 | 2 | 0 | yes |
+| 2 | 12.8 s | +1 | L3 → L3 | 0 | 0 | yes |
+| 3 | 21.6 s | +1 | L3 → L3 | 0 | 0 | yes |
+
+The standby took over in 17 s on average, which is the 15 s Lease duration plus up to one 5 s
+tick. Each takeover raised the takeover number by exactly one and kept the plan and its level;
+no step was left in a state different from the plan. Kill 1 happened as the level rose to L3,
+so two of the new L3 steps were still being applied when the test measured, 30 s later. During
+the takeover gap C1 keeps the pods it already has, so a crash delays only steps not yet applied.
+Lifeboat itself used 20–26 millicores of CPU and about 115 MiB of memory.
 
 ## 7. Discussion and known gaps
 
@@ -407,13 +482,29 @@ the Figure 2 scenario. TODO (P3).
   them to OpenFaaS without code changes.
 - **Tuning.** N, X, Y, NEA cut-offs and `cost_millis_per_rps` were set from the proposal and
   limited experiments.
-- **"Isn't this just pod priority?"** B0 is exactly that; E1–E3 compare against it on the same
-  workloads. TODO (all): state the answer with the final numbers.
+- **"Isn't this just pod priority?"** B0 is exactly that, and it does get there: in 2 of 3 runs
+  the HPA reached full C1 capacity, but 86 s later than Lifeboat on average, because it can only
+  react to CPU that is already saturated, and it never pauses the batch work that is cheapest to
+  stop, so C2 failed almost completely. The early warning is worth 20 s of capacity over the same
+  controller reacting to distress (B2), and a 1 s lower p95.
+- **Threats to validity.** One cluster size (three 2-vCPU servers), a synthetic web app and
+  synthetic batch jobs, scripted warnings with a fixed 60 s lead, and 3 runs per setup. Locust
+  runs inside the same cluster and competes for CPU. The 10× L2 pre-size is a policy choice that
+  fits this surge; a smaller real surge would over-provision C1 for the duration of the alert.
+- **Security.** Readings are signed (HMAC) and expire, Secrets are encrypted at rest, and the
+  AWS firewall is open only to the operator's IP. Not yet done: every source and the human
+  override share one key, RBAC is cluster-wide, and every pod can use the instance role.
 
 ## 8. Conclusion
 
-TODO (all, after the AWS run): two or three sentences: what Lifeboat achieved against B0–B2,
-and the most important lesson.
+Using a public flood warning that arrives a minute before the traffic, Lifeboat made room for
+the emergency service in advance: on AWS it had 7 C1 pods ready when a 20× surge hit and full
+capacity 77 s into it, half the time HPA + pod priority needed, with a lower tail latency and no
+lost batch work, and it carried on unchanged when its active executor was killed. The main
+lesson is that the warning only helps if every part that sizes from it has seen normal traffic
+first: our first AWS matrix, run on a freshly restarted controller, pre-sized 4 pods instead
+of 7. A 20× surge on a small cluster is still too large to absorb within the first minute, so
+early warning shortens the bad period, but does not remove it.
 
 ## Team contributions
 
