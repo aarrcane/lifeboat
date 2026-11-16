@@ -88,3 +88,24 @@ def get_json(url: str):
     req = urllib.request.Request(url, headers=hdrs)
     with urllib.request.urlopen(req, timeout=10) as resp:  # TLS verified; never fall back to unverified
         return json.loads(resp.read().decode())
+
+
+class BadPayload(ValueError):
+    """The API answered, but not with the shape we score. Sending a level from it would report
+    "all clear" and replace a real warning, so the feed fails instead and the last reading
+    simply expires."""
+
+
+def check_datagov(payload, data_key: str) -> dict:
+    """data.gov.sg v2 envelope: {"code": 0, "data": {<data_key>: [...]}, "errorMsg": ""}.
+    The v1 shape ({"items": [...]}) is accepted too."""
+    if not isinstance(payload, dict):
+        raise BadPayload(f"expected a JSON object, got {type(payload).__name__}")
+    if isinstance(payload.get("items"), list):
+        return payload
+    if payload.get("code", 0) not in (0, None) or payload.get("errorMsg"):
+        raise BadPayload(f"API error: code={payload.get('code')} {payload.get('errorMsg')!r}")
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get(data_key), list):
+        raise BadPayload(f"missing data.{data_key}")
+    return payload

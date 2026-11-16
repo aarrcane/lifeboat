@@ -51,34 +51,75 @@ def _tier(obj):
         return None
 
 
-def _latest_checkpoint(cp: CheckpointStore, name: str):
-    """The checkpoint store is not allowed to stall or break a tick: failure => none known."""
+def _latest_checkpoint(cp: CheckpointStore, name: str, cache_s: float = 0.0, now: Optional[float] = None):
+    """The checkpoint store is not allowed to stall or break a tick: failure => none known.
+    Successful lookups are cached for `cache_s` seconds, so a slow S3 costs at most one lookup
+    per workload per `cache_s` instead of one every tick (each can take seconds when S3 hangs)."""
+    now = time.time() if now is None else now
+    cache = getattr(cp, "_lifeboat_ts_cache", None)
+    if cache is None:
+        cache = {}
+        try:
+            setattr(cp, "_lifeboat_ts_cache", cache)
+        except AttributeError:
+            pass
+    hit = cache.get(name)
+    if cache_s > 0 and hit and now - hit[0] < cache_s:
+        return hit[1]
     try:
-        return cp.latest_ts(name)
+        ts = cp.latest_ts(name)
     except Exception as e:
         log.warning("checkpoint lookup for %s failed: %s", name, e)
-        return None
+        return hit[1] if hit else None
+    cache[name] = (now, ts)
+    return ts
+
+
+def _restart_seconds(obj, default: float = 30.0) -> float:
+    """lifeboat.io/restart-seconds, or the default (with a warning) for a value like "20s"."""
+    raw = (obj.metadata.annotations or {}).get(RESTART_ANNOTATION)
+    if raw is None:
+        return default
+    try:
+        v = float(raw)
+        if v < 0 or v != v:
+            raise ValueError(raw)
+        return v
+    except (TypeError, ValueError):
+        log.warning("%s/%s has bad %s=%r, using %.0f", obj.metadata.namespace, obj.metadata.name,
+                    RESTART_ANNOTATION, raw, default)
+        return default
 
 
 def list_workloads(cfg: Config, cp: CheckpointStore) -> list[Workload]:
+    """Every tiered Job and Deployment. One object that cannot be read (bad annotation, odd CPU
+    quantity) is skipped with a warning: it must never stop the tick for all the others."""
     batch, apps = client.BatchV1Api(), client.AppsV1Api()
     ns, out = cfg.workload_namespace, []
-    for j in batch.list_namespaced_job(ns, label_selector=TIER_LABEL).items:
-        tier = _tier(j)
-        if tier is None or job_finished(j):
-            continue
-        a = j.metadata.annotations or {}
-        out.append(Workload(
-            j.metadata.name, ns, tier, "Job",
-            _pod_millis(j.spec.template), j.spec.parallelism or 1, _latest_checkpoint(cp, j.metadata.name),
-            float(a.get(RESTART_ANNOTATION, 30)), a.get(OVERDUE_ANNOTATION, "false") == "true"))
-    for d in apps.list_namespaced_deployment(ns, label_selector=TIER_LABEL).items:
-        tier = _tier(d)
-        if tier is None:
-            continue
-        out.append(Workload(
-            d.metadata.name, ns, tier, "Deployment",
-            _pod_millis(d.spec.template), d.spec.replicas or 0))
+    to = cfg.api_timeout_s
+    for j in batch.list_namespaced_job(ns, label_selector=TIER_LABEL, _request_timeout=to).items:
+        try:
+            tier = _tier(j)
+            if tier is None or job_finished(j):
+                continue
+            a = j.metadata.annotations or {}
+            out.append(Workload(
+                j.metadata.name, ns, tier, "Job",
+                _pod_millis(j.spec.template), j.spec.parallelism or 1,
+                _latest_checkpoint(cp, j.metadata.name, cfg.checkpoint_cache_s),
+                _restart_seconds(j), a.get(OVERDUE_ANNOTATION, "false") == "true"))
+        except Exception as e:
+            log.warning("skipping job %s: %s", getattr(j.metadata, "name", "?"), e)
+    for d in apps.list_namespaced_deployment(ns, label_selector=TIER_LABEL, _request_timeout=to).items:
+        try:
+            tier = _tier(d)
+            if tier is None:
+                continue
+            out.append(Workload(
+                d.metadata.name, ns, tier, "Deployment",
+                _pod_millis(d.spec.template), d.spec.replicas or 0))
+        except Exception as e:
+            log.warning("skipping deployment %s: %s", getattr(d.metadata, "name", "?"), e)
     return out
 
 
@@ -93,11 +134,12 @@ def apply_originals(workloads: list[Workload], rec: PlanRecord | None) -> None:
                 w.replicas = st.original["replicas"]
 
 
-def free_millis() -> float:
+def free_millis(timeout_s: float = 5.0) -> float:
     core = client.CoreV1Api()
-    alloc = sum(parse_cpu(n.status.allocatable["cpu"]) for n in core.list_node().items)
+    alloc = sum(parse_cpu(n.status.allocatable["cpu"])
+                for n in core.list_node(_request_timeout=timeout_s).items)
     used = 0
-    for p in core.list_pod_for_all_namespaces().items:
+    for p in core.list_pod_for_all_namespaces(_request_timeout=timeout_s).items:
         if p.spec.node_name and p.status.phase in ("Pending", "Running"):
             used += sum(parse_cpu((c.resources.requests or {}).get("cpu", "0"))
                         for c in p.spec.containers if c.resources)
@@ -132,6 +174,7 @@ def is_unschedulable(pod, min_age_s: float = 0.0, now: Optional[float] = None) -
 def c1_unschedulable_pods(cfg: Config) -> int:
     core = client.CoreV1Api()
     pods = core.list_namespaced_pod(cfg.workload_namespace, label_selector=f"{TIER_LABEL}=C1",
-                                    field_selector="status.phase=Pending").items
+                                    field_selector="status.phase=Pending",
+                                    _request_timeout=cfg.api_timeout_s).items
     now = time.time()
     return sum(1 for p in pods if is_unschedulable(p, cfg.c1_stuck_grace_s, now))

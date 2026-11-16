@@ -46,7 +46,7 @@ from lifeboat import discovery, ingest, metrics  # noqa: E402
 from lifeboat.config import Config  # noqa: E402
 from lifeboat.executor import Executor  # noqa: E402
 from lifeboat.forecast import TrafficForecaster  # noqa: E402
-from lifeboat.models import Level, Reading, Tier, Workload  # noqa: E402
+from lifeboat.models import Reading, Tier, Workload  # noqa: E402
 from lifeboat.monitor import Monitor  # noqa: E402
 from lifeboat.plan_store import InMemoryPlanStore  # noqa: E402
 from lifeboat.planner import c1_floor_from_plan, c1_sizing_rps, make_plan  # noqa: E402

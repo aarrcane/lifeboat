@@ -15,8 +15,9 @@ cluster's own traffic, into a severity level through a 2-of-3 vote. It then make
 emergency service in advance by pausing (not killing) less important work, and it finishes the
 job even if it crashes halfway. On a three-server cluster on AWS, with a 20× traffic surge and a
 60-second warning, Lifeboat had 7 emergency pods ready before the surge and reached full
-capacity 77 s into it, against 163 s for the standard Kubernetes autoscaler. The slowest 5 % of
-emergency requests took 2.9 s instead of 5 s, and no paused work was lost.
+capacity 77 s into it, against 163 s for the standard Kubernetes autoscaler. It answered 2.5 times
+as many emergency requests within 0.5 s, the slowest 5 % took 2.9 s instead of 5 s, and no
+paused work was lost.
 
 ## 1. Introduction
 
@@ -108,8 +109,9 @@ holder stops renewing it, the lease expires after 15 s and the standby takes ove
 the active copy writes the plan and every workload's original settings into a **TriagePlan**
 object. Each step describes a target state ("this Job is suspended", "C1 has 7 pods"), so doing
 it twice does no harm, and a new executor can simply carry on. Each takeover stamps a higher
-**takeover number** on the plan, and writes with an older number are rejected, so a frozen old
-copy cannot overwrite the new one's work.
+**takeover number** on the plan, and plan writes with an older number are rejected, so a frozen
+old copy cannot overwrite the plan. Before each change to a workload the executor also checks it
+still holds the Lease, and every step is safe to repeat.
 
 Before pausing a job, Lifeboat asks it to save a checkpoint and waits up to 6 seconds. The job
 writes its data first and a small "latest" pointer last, so a half-written checkpoint is never
@@ -122,9 +124,9 @@ used, and on resume it continues from there.
 | Cluster | k3s on 3 servers sharing an embedded etcd database [10]; k3d on laptops |
 | Cloud | AWS Academy Learner Lab: 3 × t3.large (2 vCPU, 8 GiB), about US$0.26/hour |
 | Controller | Python with Kopf, 2 copies, leader election with a Lease |
-| Warning feeds | Kubernetes CronJobs calling the live data.gov.sg APIs |
+| Warning feeds | Kubernetes CronJobs calling the live data.gov.sg APIs; a reply they cannot read sends nothing |
 | Checkpoints | Amazon S3 (MinIO on laptops) |
-| Monitoring | Prometheus and Grafana, an 11-panel dashboard and 7 alerts |
+| Monitoring | Prometheus and Grafana, an 11-panel dashboard and 8 alerts |
 
 **Fault tolerance at every layer.** All three AWS machines are k3s *servers* that share the
 cluster database, so losing any one of them still leaves a working majority, and Lifeboat's
@@ -143,7 +145,8 @@ until it is running. On a laptop, the same command first creates a local three-s
 **Security.** The firewall only admits our own IP address. The Learner Lab doesn't allow
 access keys, so nothing in the cluster holds one: the machines carry a lab role that lets the
 checkpoint code reach S3. The signing key never enters git, lives in a Kubernetes Secret, and
-every server encrypts Secrets on disk. Every push to GitHub runs unit tests, manifest checks, a
+every server encrypts Secrets on disk. Lifeboat may only change objects in its own namespace and
+the workload namespace; cluster-wide it can only read nodes and pods. Every push to GitHub runs unit tests, manifest checks, a
 build of all three images, and a full integration test (lease, plan, takeover, undo) against a
 real Kubernetes API server.
 
@@ -152,7 +155,9 @@ edition no longer supports the features we needed without an image registry and 
 2-CPU machines that wasn't worth it for a job that runs every few minutes, so we use plain
 CronJobs, and the code stays OpenFaaS-ready. Testing also caught real bugs: missing monitoring
 data was being treated as "zero traffic"; the forecast cast a phantom vote minutes after a surge
-ended; and the very first forged reading couldn't trigger an alert. All are fixed and covered by
+ended; and the very first forged reading couldn't trigger an alert. A final review found more:
+a monitoring outage kept the last forecast vote alive, a human override reached only the pod
+that received it, and one future-dated reading could mute a source. All are fixed and covered by
 tests.
 
 ## 4. Evaluation
@@ -165,7 +170,9 @@ surge hits: users jump from 10 to 200, a **20× increase**, for 3 minutes, with 
 emergency site (C1) and 40 % on the citizen portal (C2). Batch jobs run throughout. So Lifeboat
 gets a **60-second head start**, and a request only counts as served if it succeeds within
 **0.5 s**. We replay scripted warnings because a real flood can't be scheduled and every setup
-must see identical inputs.
+must see identical inputs. To fit a run into 10 minutes, the calm period is shortened to
+1 minute (5 by default), the forecast learns "normal" from 4 samples instead of 8, and the
+autoscaler's scale-down window is 60 s.
 
 | Setup | What it is |
 | --- | --- |
@@ -181,12 +188,16 @@ first, and re-ran all 12 runs.
 
 ### 4.2 Speed and service quality (E1, E2)
 
-| Setup | C1 pods ready at surge | Time to full capacity | Requests served in time | Slowest 5 % (p95) | C2 served in time |
+| Setup | C1 pods ready at surge | Time to full capacity (range) | C1 requests served in 0.5 s | Slowest 5 % (p95) | C2 served in time |
 | --- | --- | --- | --- | --- | --- |
-| B0 autoscaler | 2 | 163 s | 33 % | 5.0 s | 0.3 % |
-| B1 + spare room | 2 | 171 s *(1 run never got there)* | 29 % | 5.0 s | 0.3 % |
-| B2 no warnings | 2 | 97 s | 47 % | 3.9 s | 41 % |
-| **Lifeboat** | **7** | **77 s** | **47 %** | **2.9 s** | **41 %** |
+| B0 autoscaler | 2 | 163 s (123–184) | 3,117 (33 %) | 5.0 s | 0.3 % |
+| B1 + spare room | 2 | 171 s (155–186) *(1 run never got there)* | 2,728 (29 %) | 5.0 s | 0.3 % |
+| B2 no warnings | 2 | 97 s (87–102) | 7,074 (47 %) | 3.9 s | 41 % |
+| **Lifeboat** | **7** | **77 s (76–79)** | **7,698 (47 %)** | **2.9 s** | **41 %** |
+
+*Means of 3 runs. Requests served: C1 requests answered within 0.5 s during the 3-minute surge
+(21,600 were offered: 120 users, one request per second each); in brackets, the share of the
+requests actually sent.*
 
 ![Figure 2. Ready C1 pods over time, one line per setup. Lifeboat starts growing before the surge at t = 150 s.](../../results/figures/e1_timeline.png)
 
@@ -194,20 +205,36 @@ first, and re-ran all 12 runs.
 full capacity **86 s sooner than the standard autoscaler** and 20 s sooner than the same
 controller without warnings.
 
+**It serves far more of the emergency traffic.** Each simulated user waits for an answer before
+sending the next request, so an overloaded setup also *receives* fewer requests. Counted in
+requests, Lifeboat answered 7,698 emergency requests in time, 2.5 times as many as the
+autoscaler (3,117). The share of sent requests (47 % against 33 %) hides most of that gap.
+
 **But a 20× surge still hurts.** No setup kept every request under 0.5 s: the first part of the
-surge is rough while the last pods start. Lifeboat served the same share of requests in time as
-B2 (47 %). The difference shows in the *worst* requests: the slowest 5 % took 2.9 s with
-Lifeboat, 3.9 s with B2, and hit the 5 s limit with both autoscaler setups. Pausing batch work
-also helps C2: with B0 and B1 the citizen portal almost completely failed (0.3 %), while
-Lifeboat kept 41 % of its requests in time.
+surge is rough while the last pods start. Lifeboat served about 9 % more requests in time than
+B2, and its slowest 5 % took 2.9 s against 3.9 s for B2 and the 5 s limit for both autoscaler
+setups. The citizen portal C2 gains from the L3 step that switches off its extra features
+(each request then costs a fifth of the CPU): with B0 and B1, which have no such step and no
+autoscaler for C2, it almost completely failed (0.3 %), while Lifeboat kept 41 % in time.
+
+**Why the baselines are slow, and why Lifeboat still needs 77 s.** C1 pods have a CPU limit equal
+to their request, so CPU use cannot pass 100 % against the autoscaler's 70 % target, and the HPA
+grows C1 by only about 1.5× per step (2, 3, 5, 7, 10 pods, 30–45 s apart). In one B1 run the
+spare room was never used: the autoscaler, not free room, was the bottleneck. A request-rate
+autoscaler such as KEDA [4] would be a stronger baseline. Lifeboat's own limit is its sizing rule:
+it sizes C1 from the traffic C1 *serves*, at most 1.25× above it, and served traffic cannot exceed
+current capacity. So it held 7 pods for the first 55 s of the surge, then grew step by step.
 
 ![Figure 3. Share of requests served within 0.5 s, and the slowest 5 % of response times.](../../results/figures/e2_service_quality.png)
 
 ### 4.3 Lost work, false alarms and crashes (E3, E4, E5)
 
-**No work lost (E3).** In every Lifeboat and B2 run, the analytics and backup jobs were paused
-for about 4 minutes and resumed exactly where they stopped: **zero progress lost** across all
-runs.
+**No work lost (E3).** In every Lifeboat and B2 run, the analytics and backup jobs resumed
+exactly where they stopped: **zero progress lost** across all runs. They were back about
+4 minutes after the surge ended, 7 to 8.5 minutes after they were paused. That is the price of
+triage: with B0 and B1 batch work was hardly interrupted (one 35 s restart in twelve job runs).
+The workers also save on SIGTERM, so E3 shows that nothing is lost, not how much the checkpoint
+request adds on its own.
 
 **No false alarms (E4).** We ran four scripted scenarios through the real voter:
 
@@ -224,16 +251,18 @@ on a gradual surge with zero false emergencies on normal days, where our startin
 That is exactly why PUB and NEA matter.
 
 **Surviving a crash (E5).** During a demo run on AWS we killed the active copy of Lifeboat
-without warning, three times, each time mid-plan:
+without warning, three times, each time during an active triage:
 
-| Kill | Standby took over after | Takeover number | Plan kept? | Steps different from plan |
-| --- | --- | --- | --- | --- |
-| 1 | 17.6 s | +1 | yes | 0 |
-| 2 | 12.8 s | +1 | yes | 0 |
-| 3 | 21.6 s | +1 | yes | 0 |
+| Kill | Standby took over after | Takeover number | Plan kept? | Done steps not in target state | Steps still pending after 30 s |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 17.6 s | +1 | yes | 0 | 2 |
+| 2 | 12.8 s | +1 | yes | 0 | 0 |
+| 3 | 21.6 s | +1 | yes | 0 | 0 |
 
-The standby took over in about 17 s, which is the 15 s lease plus up to one 5 s tick, and C1
-kept its pods during the handover. Lifeboat itself is light: 20–26 millicores of CPU and about
+The standby took over in about 17 s, which is the 15 s lease plus one or two 5 s ticks, and C1
+kept its pods during the handover. No step marked done had drifted. In kill 1 the level rose
+from L2 to L3 while the standby was taking over, which added two new steps; they were still
+being carried out when the 30 s measurement ended. Lifeboat itself is light: 20–26 millicores of CPU and about
 115 MiB of memory.
 
 ## 5. Related work
@@ -253,8 +282,9 @@ offers today; it does get there in every run, just 86 s later.
 ## 6. Conclusions and future work
 
 Lifeboat shows that a public flood warning, arriving just a minute before the traffic, makes a
-real difference. On AWS it had 7 emergency pods ready when a 20× surge hit and reached full
-capacity in half the time a standard autoscaler needed. Worst-case response times were lower,
+real difference. On AWS it had 7 emergency pods ready when a 20× surge hit, reached full
+capacity in half the time a standard autoscaler needed, and answered 2.5 times as many
+emergency requests in time. Worst-case response times were lower,
 no paused work was lost, and it carried on smoothly when we killed its active copy. It does not
 make a 20× surge painless on a small cluster: the first minute is still rough. What it does is
 shorten the bad part and put the emergency service first in line.
@@ -265,8 +295,9 @@ Our main lesson is that a warning only helps if everything that acts on it alrea
 **Beyond floods: any disaster, anywhere.** We used floods because they are
 Singapore's real risk, but nothing in Lifeboat is flood-specific. The voter simply counts signed readings
 from *any* named source, so a new hazard only needs a small feed that turns a public warning
-into a level. As a proof of concept we wrote one for earthquakes (`feeds/usgs_quake.py`, unit
-tested but not deployed or evaluated). Other regions could plug in their own:
+into a level, registered in one line of `feeds/handler.py`. As a proof of concept we wrote one
+for earthquakes (`feeds/usgs_quake.py`, `FEED_SOURCE=S4`; unit tested but not deployed or
+evaluated). Other regions could plug in their own:
 
 | Hazard | Public feed | L1 Watch | L2 Emergency |
 | --- | --- | --- | --- |
@@ -279,9 +310,11 @@ still needs a second kind of evidence, such as the traffic forecast, before anyt
 
 **Limits and future work.** We tested one small cluster, synthetic workloads, a fixed 60-second
 warning and 3 runs per setup, and no real flood happened during the project, so warnings were
-replayed. Next we would: keep the learned baseline across restarts; give each source and the
-human override its own key, and narrow Lifeboat's permissions; run two copies of Prometheus;
-and use Holt-Winters to learn daily traffic patterns.
+replayed. Next we would: keep the learned baseline across restarts; size C1 from offered rather
+than served traffic once it is measurably struggling; check per-node fit instead of cluster-wide
+free CPU; give each source and the human override its own key; run two copies of Prometheus;
+and use Holt-Winters to learn daily traffic patterns. Lease expiry assumes the servers' clocks
+agree (NTP).
 
 ## Team contributions
 

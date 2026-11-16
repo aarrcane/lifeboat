@@ -11,6 +11,7 @@ from lifeboat.config import Config
 from lifeboat.executor import Executor
 from lifeboat.forecast import TrafficForecaster
 from lifeboat.models import Level, Reading, Step, step_key
+from lifeboat.override_store import NONE as NO_OVERRIDE, InMemoryOverrideStore
 from lifeboat.plan_store import InMemoryPlanStore
 from lifeboat.signing import sign
 from lifeboat.voter import Voter
@@ -20,7 +21,7 @@ SECRET = "s"
 PLAN = [Step(step_key("suspend_job", "ns", f"j{i}"), "suspend_job", "ns", f"j{i}", {}) for i in (1, 2, 3)]
 
 
-def make_replica(store, cluster, elector, calm_s=300.0) -> ctl.Lifeboat:
+def make_replica(store, cluster, elector, calm_s=300.0, overrides=None) -> ctl.Lifeboat:
     """A Lifeboat with fake Prometheus, Kubernetes and plan store (no __init__: it needs a cluster)."""
     lb = ctl.Lifeboat.__new__(ctl.Lifeboat)
     lb.cfg = Config(hmac_secret=SECRET, calm_minutes=calm_s / 60)
@@ -35,13 +36,15 @@ def make_replica(store, cluster, elector, calm_s=300.0) -> ctl.Lifeboat:
     lb.store = store
     lb.executor = Executor(store, FakeActions(cluster), elector)
     lb._last_sample = 0.0
+    lb.overrides = overrides if overrides is not None else InMemoryOverrideStore()
+    lb._override_seen = NO_OVERRIDE
     return lb
 
 
 @pytest.fixture(autouse=True)
 def no_cluster(monkeypatch):
     monkeypatch.setattr(ctl.discovery, "list_workloads", lambda cfg, cp: [])
-    monkeypatch.setattr(ctl.discovery, "free_millis", lambda: 0.0)
+    monkeypatch.setattr(ctl.discovery, "free_millis", lambda *a: 0.0)
     # the plan for a level: the three pauses at L2 and above, nothing below
     monkeypatch.setattr(ctl, "make_plan", lambda level, *a, **k: list(PLAN) if level >= Level.L2 else [])
 

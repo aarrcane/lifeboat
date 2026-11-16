@@ -32,9 +32,12 @@ spec:
           ports:
             - {name: ingest, containerPort: 8081}
             - {name: metrics, containerPort: 9100}
-          # kopf's liveness endpoint (--liveness in the Dockerfile). The delay covers startup,
-          # which waits for the S3 bucket.
-          livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 30, periodSeconds: 10}
+          # /healthz on the ingest port fails (503) when the control loop has not finished a tick
+          # for 60 s (LIFEBOAT_LOOP_STALL_S): a hung API call is restarted, not left "healthy".
+          # Readiness keeps a stalled replica out of the headless Service the feeds send to.
+          # The initial delay covers startup, which waits for the S3 bucket.
+          livenessProbe: {httpGet: {path: /healthz, port: 8081}, initialDelaySeconds: 30, periodSeconds: 10, failureThreshold: 3}
+          readinessProbe: {httpGet: {path: /healthz, port: 8081}, initialDelaySeconds: 5, periodSeconds: 5}
           resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {memory: 256Mi}}
 ---
 # Headless: feeds resolve every pod IP and send each reading to BOTH replicas.

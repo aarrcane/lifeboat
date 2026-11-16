@@ -13,6 +13,7 @@ replicas="$(kubectl -n lifeboat get deploy lifeboat -o jsonpath='{.spec.replicas
 cleanup() {
   kubectl -n lifeboat delete lease lifeboat-executor --ignore-not-found >/dev/null
   kubectl -n lifeboat delete triageplans.lifeboat.sit.edu --all --ignore-not-found >/dev/null
+  kubectl -n lifeboat delete configmap lifeboat-override --ignore-not-found >/dev/null
   if [[ "$replicas" != "0" ]]; then kubectl -n lifeboat scale deploy/lifeboat --replicas="$replicas" >/dev/null; fi
   rm -rf "$tmp"
 }
@@ -24,6 +25,7 @@ if [[ "$replicas" != "0" ]]; then
 fi
 kubectl -n lifeboat delete lease lifeboat-executor --ignore-not-found >/dev/null
 kubectl -n lifeboat delete triageplans.lifeboat.sit.edu --all --ignore-not-found >/dev/null
+kubectl -n lifeboat delete configmap lifeboat-override --ignore-not-found >/dev/null
 
 # kubeconfig for the lifeboat ServiceAccount, same API server and CA as the admin one
 server="$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.server}')"

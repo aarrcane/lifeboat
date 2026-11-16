@@ -75,6 +75,10 @@ E3_FIELDS = ["setup", "run", "workload", "progress_lost_s", "restore_s"]
 TIMELINE_FIELDS = ["t", "c1_ready", "c1_spec", "level", "plan_steps", "c3_suspend", "c3_active",
                    "c4_suspend", "c4_active", "placeholder_ready"]
 DRY = False
+# set by prepare() for the experiments only; finish() removes them so demos and E5 run with the
+# defaults the report describes (calm period 5 min, forecast warm-up 8 samples)
+EXPERIMENT_ENV = ("LIFEBOAT_CALM_MINUTES=1", "LIFEBOAT_FORECAST_WARMUP_SAMPLES=4")
+RESTORE_ENV = tuple(e.split("=")[0] + "-" for e in EXPERIMENT_ENV)
 
 
 # ---------------------------------------------------------------- kubectl
@@ -133,8 +137,7 @@ def prepare(setup: str) -> None:
     kubectl("delete", "-f", str(ROOT / HPA), "--ignore-not-found")                        # never next to Lifeboat
     kubectl("-n", SYS, "delete", "job", "e3-collect", "--ignore-not-found", "--wait=true")
     kubectl("-n", SYS, "set", "env", "deploy/lifeboat",
-            f"LIFEBOAT_EARLY_WARNING={'true' if s['early_warning'] else 'false'}",
-            "LIFEBOAT_CALM_MINUTES=1", "LIFEBOAT_FORECAST_WARMUP_SAMPLES=4")
+            f"LIFEBOAT_EARLY_WARNING={'true' if s['early_warning'] else 'false'}", *EXPERIMENT_ENV)
     sh("bash", str(ROOT / "scripts" / "reset.sh"), env={"LIFEBOAT_REPLICAS": str(s["lifeboat"])},
        timeout=900)
     kubectl("-n", DEMO, "scale", "deploy/placeholder", f"--replicas={s['placeholders']}")
@@ -363,7 +366,7 @@ def one_run(setup: str, run: int, out: Path) -> None:
 def finish() -> None:
     """Leave the cluster as `make deploy workloads` would: no HPA, Lifeboat x2 with warnings on."""
     kubectl("delete", "-f", str(ROOT / HPA), "--ignore-not-found", check=False)
-    kubectl("-n", SYS, "set", "env", "deploy/lifeboat", "LIFEBOAT_EARLY_WARNING=true", check=False)
+    kubectl("-n", SYS, "set", "env", "deploy/lifeboat", "LIFEBOAT_EARLY_WARNING=true", *RESTORE_ENV, check=False)
     kubectl("-n", SYS, "scale", "deploy/lifeboat", "--replicas=2", check=False)
     kubectl("-n", DEMO, "scale", "deploy/placeholder", "--replicas=2", check=False)
 

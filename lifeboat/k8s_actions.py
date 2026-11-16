@@ -7,6 +7,8 @@ import time
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
+TIMEOUT_S = 5            # every API call: a hung call must not stall the loop past the Lease
+
 from .checkpoint import CheckpointStore
 from .config import Config
 from .models import Step
@@ -31,11 +33,11 @@ class K8sActions:
 
     def _read(self, s: Step) -> dict:
         if s.action == "suspend_job":
-            return {"suspend": bool(self.batch.read_namespaced_job(s.name, s.namespace).spec.suspend)}
+            return {"suspend": bool(self.batch.read_namespaced_job(s.name, s.namespace, _request_timeout=TIMEOUT_S).spec.suspend)}
         if s.action == "scale_deployment":
-            return {"replicas": self.apps.read_namespaced_deployment(s.name, s.namespace).spec.replicas}
+            return {"replicas": self.apps.read_namespaced_deployment(s.name, s.namespace, _request_timeout=TIMEOUT_S).spec.replicas}
         if s.action == "set_configmap":
-            data = self.core.read_namespaced_config_map(s.name, s.namespace).data or {}
+            data = self.core.read_namespaced_config_map(s.name, s.namespace, _request_timeout=TIMEOUT_S).data or {}
             return {"data": {k: data.get(k) for k in s.params["data"]}}
         raise ValueError(s.action)
 
@@ -58,12 +60,12 @@ class K8sActions:
 
     def _write(self, s: Step, state: dict) -> None:
         if s.action == "suspend_job":
-            self.batch.patch_namespaced_job(s.name, s.namespace, {"spec": {"suspend": state["suspend"]}})
+            self.batch.patch_namespaced_job(s.name, s.namespace, {"spec": {"suspend": state["suspend"]}}, _request_timeout=TIMEOUT_S)
         elif s.action == "scale_deployment":
             self.apps.patch_namespaced_deployment_scale(
-                s.name, s.namespace, {"spec": {"replicas": state["replicas"]}})
+                s.name, s.namespace, {"spec": {"replicas": state["replicas"]}}, _request_timeout=TIMEOUT_S)
         elif s.action == "set_configmap":
-            self.core.patch_namespaced_config_map(s.name, s.namespace, {"data": state["data"]})  # None => delete key
+            self.core.patch_namespaced_config_map(s.name, s.namespace, {"data": state["data"]}, _request_timeout=TIMEOUT_S)  # None => delete key
 
     def apply(self, s: Step) -> None:
         target = self._target(s)
@@ -91,12 +93,19 @@ class K8sActions:
         would take N x wait and outlive the Lease."""
         asked = {}
         for s in steps:
-            if s.params.get("checkpoint") and self._current(s) != self._target(s):
-                asked[s.name] = self.cp.request(s.name)
+            try:                                           # one bad step must not cancel the others
+                if s.params.get("checkpoint") and self._current(s) != self._target(s):
+                    asked[s.name] = self.cp.request(s.name)
+            except Exception as e:
+                log.warning("could not ask %s to checkpoint: %s", s.key, e)
         deadline = time.time() + self.checkpoint_wait_s()
         while asked and time.time() < deadline:
             for name, ts in list(asked.items()):
-                latest = self.cp.latest_ts(name)
+                try:
+                    latest = self.cp.latest_ts(name)
+                except Exception as e:
+                    log.warning("checkpoint lookup for %s failed: %s", name, e)
+                    latest = None
                 if latest and latest >= ts:
                     del asked[name]
             if asked:

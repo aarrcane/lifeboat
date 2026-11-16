@@ -47,9 +47,9 @@ def _deploy(name, tier):
 def fake_api(monkeypatch):
     objs = {"jobs": [], "deploys": []}
     monkeypatch.setattr(discovery.client, "BatchV1Api",
-                        lambda: NS(list_namespaced_job=lambda ns, label_selector: NS(items=objs["jobs"])))
+                        lambda: NS(list_namespaced_job=lambda ns, label_selector, **kw: NS(items=objs["jobs"])))
     monkeypatch.setattr(discovery.client, "AppsV1Api",
-                        lambda: NS(list_namespaced_deployment=lambda ns, label_selector: NS(items=objs["deploys"])))
+                        lambda: NS(list_namespaced_deployment=lambda ns, label_selector, **kw: NS(items=objs["deploys"])))
     return objs
 
 

@@ -23,10 +23,12 @@ run() {   # file, command...
   echo "  $f"
 }
 
-echo "== saving evidence to $OUT"
+echo "== saving evidence to $OUT (run it with the cluster idle: both Lifeboat pods Running)"
 run nodes.txt kubectl get nodes -o wide
 run version.txt kubectl version
 run lifeboat-pods.txt kubectl -n lifeboat get pods -o wide
+run lease.txt kubectl -n lifeboat get lease lifeboat-executor -o wide
+run feeds.txt kubectl -n lifeboat get cronjobs,jobs -l app=lifeboat-feed
 run demo-pods.txt kubectl -n lifeboat-demo get deploy,jobs,pods -o wide
 run secrets-encrypt.txt ssh -i "$SSH_KEY" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=accept-new "ubuntu@$EIP" sudo k3s secrets-encrypt status
 # shellcheck disable=SC2086,SC2016  # backticks are a JMESPath literal, not shell
@@ -36,4 +38,6 @@ run s3-objects.txt bash -c "aws s3 ls 's3://$BUCKET' --recursive | head -n 50"
 run helm.txt helm list -A
 run top-nodes.txt kubectl top nodes
 run top-lifeboat.txt kubectl -n lifeboat top pod
+# keep the key path and the public IP out of the committed file
+sed -i -e "s|$SSH_KEY|<ssh key>|g" -e "s|$EIP|<server-1 Elastic IP>|g" "$OUT/secrets-encrypt.txt"
 echo "done. Commit $OUT/ with the results."

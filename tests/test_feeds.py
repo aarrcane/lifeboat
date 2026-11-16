@@ -1,8 +1,6 @@
 import json
 import os
 from pathlib import Path
-import threading
-import urllib.request
 from unittest.mock import patch
 
 from feeds import common, handler, nea, pub

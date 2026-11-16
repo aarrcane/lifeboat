@@ -10,7 +10,7 @@ import yaml
 
 from lifeboat.config import Config
 from lifeboat.forecast import TrafficForecaster
-from lifeboat.forecast_eval import (Params, benchmark, gradual_surge_rps, locust_surge_rps, measured,
+from lifeboat.forecast_eval import (Params, benchmark, locust_surge_rps, measured,
                                     no_crisis_rps, replay, score_quiet, sweep)
 from lifeboat.models import Level
 from lifeboat.monitor import Monitor
@@ -230,7 +230,8 @@ def test_every_plotter_runs_on_sample_csvs(tmp_path, monkeypatch):
 def test_rejection_counters_exist_before_the_first_forgery():
     # increase() needs a sample before the first increment, or the first forged reading never alerts.
     from prometheus_client import generate_latest
-    import lifeboat.metrics  # noqa: F401
+    import importlib
+    importlib.import_module("lifeboat.metrics")             # registers the counters
     text = generate_latest().decode()
-    for reason in ("malformed", "bad_signature", "expired"):
+    for reason in ("malformed", "bad_signature", "expired", "future"):
         assert f'lifeboat_rejected_readings_total{{reason="{reason}"}}' in text

@@ -12,10 +12,11 @@ echo "1/6 stopping Lifeboat"
 kubectl -n "$SYS" scale deploy/lifeboat --replicas=0
 kubectl -n "$SYS" wait --for=delete pod -l app=lifeboat --timeout=90s 2>/dev/null || true
 
-echo "2/6 removing replay/load jobs, the TriagePlan and the executor Lease"
+echo "2/6 removing replay/load jobs, the TriagePlan, the executor Lease and any human override"
 kubectl -n "$SYS" delete job replay locust --ignore-not-found --wait=true
 kubectl -n "$SYS" delete triageplans.lifeboat.sit.edu --all --ignore-not-found
 kubectl -n "$SYS" delete lease lifeboat-executor --ignore-not-found
+kubectl -n "$SYS" delete configmap lifeboat-override --ignore-not-found
 
 echo "3/6 removing demo workloads"
 kubectl delete -f deploy/04-demo-workloads.yaml --ignore-not-found --wait=true

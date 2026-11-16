@@ -6,6 +6,8 @@ from typing import Optional
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
+TIMEOUT_S = 5            # every API call: a hung call must not stall the loop past the Lease
+
 from .models import PlanRecord
 from .plan_store import Fenced
 
@@ -19,7 +21,7 @@ class K8sPlanStore:
 
     def _read(self) -> Optional[dict]:
         try:
-            return self.api.get_namespaced_custom_object(GROUP, VERSION, self.ns, PLURAL, self.name)
+            return self.api.get_namespaced_custom_object(GROUP, VERSION, self.ns, PLURAL, self.name, _request_timeout=TIMEOUT_S)
         except ApiException as e:
             if e.status == 404:
                 return None
@@ -38,12 +40,12 @@ class K8sPlanStore:
                     "spec": rec.to_spec()}
             try:
                 if cur is None:
-                    self.api.create_namespaced_custom_object(GROUP, VERSION, self.ns, PLURAL, body)
+                    self.api.create_namespaced_custom_object(GROUP, VERSION, self.ns, PLURAL, body, _request_timeout=TIMEOUT_S)
                     return
                 if rec.takeover < int(cur.get("spec", {}).get("takeover", 0)):
                     raise Fenced("a newer executor owns the plan")
                 body["metadata"]["resourceVersion"] = cur["metadata"]["resourceVersion"]
-                self.api.replace_namespaced_custom_object(GROUP, VERSION, self.ns, PLURAL, self.name, body)
+                self.api.replace_namespaced_custom_object(GROUP, VERSION, self.ns, PLURAL, self.name, body, _request_timeout=TIMEOUT_S)
                 return
             except ApiException as e:
                 if e.status == 409:

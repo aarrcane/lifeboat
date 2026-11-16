@@ -15,7 +15,13 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import nea, pub
+from . import nea, pub, usgs_quake
+
+# source id -> feed module. A new hazard is one module with handle() plus a line here; the
+# CronJob picks it with FEED_SOURCE (deploy/feeds/feeds-cronjobs.yaml).
+FEEDS = {"S1": pub, "S2": nea, usgs_quake.SOURCE: usgs_quake}
+ALIASES = {"PUB": "S1", "PUB-FEED": "S1", "NEA": "S2", "NEA-FEED": "S2",
+           "USGS": usgs_quake.SOURCE, "QUAKE": usgs_quake.SOURCE}
 
 
 def resolve_source(event=None) -> str:
@@ -24,16 +30,14 @@ def resolve_source(event=None) -> str:
         src = str(event["source"]).strip().upper()
     elif hasattr(event, "path") and "nea" in str(getattr(event, "path", "")).lower():
         src = "S2"
-    if src in ("S2", "NEA", "NEA-FEED"):
-        return "S2"
-    return "S1"
+    return ALIASES.get(src, src)
 
 
 def handle(event=None, context=None) -> dict:
     src = resolve_source(event)
-    if src == "S2":
-        return nea.handle(event, context)
-    return pub.handle(event, context)
+    if src not in FEEDS:
+        raise ValueError(f"unknown feed source {src!r}; known: {sorted(FEEDS)}")
+    return FEEDS[src].handle(event, context)
 
 
 def handle_http(method: str, path: str, raw_body: bytes = b"") -> tuple[int, dict]:

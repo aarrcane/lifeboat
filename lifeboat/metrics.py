@@ -9,9 +9,11 @@ FORECAST_RATIO = Gauge("lifeboat_forecast_ratio", "Forecast traffic / baseline")
 PLAN_STEPS = Gauge("lifeboat_plan_steps", "Steps in TriagePlan", ["state"])
 BAD_READINGS = Counter("lifeboat_rejected_readings_total", "Readings rejected at ingest", ["reason"])
 OVERRIDES = Counter("lifeboat_overrides_total", "Human overrides")
+LOOP_AGE = Gauge("lifeboat_loop_age_seconds", "Seconds since the control loop last finished a tick")
+TICK_SECONDS = Gauge("lifeboat_tick_seconds", "Duration of the last control-loop tick")
 
 # Export every rejection reason at 0 from the start. A labelled counter only appears on its
 # first increment, and increase() needs a sample before it, so without this the first forged
 # reading would never fire the LifeboatForgedReadings alert (found by scripts/p6_live_check.py).
-for _reason in ("malformed", "bad_signature", "expired"):
+for _reason in ("malformed", "bad_signature", "expired", "future"):
     BAD_READINGS.labels(_reason)
