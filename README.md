@@ -11,7 +11,7 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 | `lifeboat/k8s_actions.py`, `checkpoint.py` | target-state actions; checkpoint-before-pause contract (S3) | Table 1 #3 |
 | `lifeboat/forecast.py`, `monitor.py` | Holt forecast (S3), Prometheus + C1-struggling (L3) | Sec. 4 |
 | `lifeboat/forecast_eval.py`, `scripts/demo_p6.py` | forecast benchmark + alpha/beta/horizon sweep | E4 (S3) |
-| `scripts/make_dashboard.py`, `deploy/monitoring/grafana-dashboard.yaml` | Grafana dashboard (11 panels) | E1-E5 |
+| `scripts/make_dashboard.py`, `deploy/monitoring/grafana-dashboard.yaml` | Grafana dashboard (12 panels) | E1-E5 |
 | `scripts/p6_live_check.py` | real Prometheus + webapp + Lifeboat loop, no cluster | E1-E5 |
 | `deploy/monitoring/alert-rules.yaml` | 7 Prometheus alerts, drawn on the dashboard | video |
 | `scripts/plot_results.py`, `export_e4.py`, `e5_crash_test.py` | results CSVs -> figures; E4 export; E5 kill test on a cluster | E1-E5 |

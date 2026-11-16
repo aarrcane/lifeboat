@@ -149,7 +149,8 @@ def test_dashboard_covers_work_split_panels_and_known_metrics():
     d = _dashboard()
     exprs = " ".join(t["expr"] for p in d["panels"] for t in p["targets"])
     for needed in ("lifeboat_level", "lifeboat_source_level", "lifeboat_plan_steps",
-                   "lifeboat_is_active_executor", "lifeboat_takeover_number", "http_request_duration_seconds"):
+                   "lifeboat_is_active_executor", "lifeboat_takeover_number", "lifeboat_overrides_total",
+                   "http_request_duration_seconds"):
         assert needed in exprs
     for name in set(re.findall(r"lifeboat_[a-z0-9_]+", exprs)):
         base = name.removesuffix("_total")

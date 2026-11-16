@@ -35,7 +35,7 @@ kubectl -n monitoring port-forward svc/kps-grafana 3000:80     # Grafana at http
 
 - Record each shot separately and cut; the replay and calm periods are long in real time.
   For the video, `LIFEBOAT_CALM_MINUTES=1` shortens step-down (say so in the narration).
-- Zoom the Grafana panels you talk about; viewers can't read 11 panels at once.
+- Zoom the Grafana panels you talk about; viewers can't read 12 panels at once.
 - Keep the terminal font large (at least 16 pt).
 - Shot 6 is the most important for marks (Challenge 4). Rehearse it once before recording.
 - Alert annotations come from `deploy/monitoring/alert-rules.yaml`; if none appear, check

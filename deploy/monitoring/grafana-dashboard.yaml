@@ -505,6 +505,39 @@ data:
         },
         {
           "id": 11,
+          "title": "Human overrides",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 29,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase(lifeboat_overrides_total[5m]))",
+              "legendFormat": "overrides"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "options": {}
+        },
+        {
+          "id": 12,
           "title": "Free CPU in cluster (millicores)",
           "type": "timeseries",
           "datasource": {
