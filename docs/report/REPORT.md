@@ -232,6 +232,10 @@ without warning, three times, each time mid-plan:
 | 2 | 12.8 s | +1 | yes | 0 |
 | 3 | 21.6 s | +1 | yes | 0 |
 
+During kill 1 the alert level rose from L2 to L3, which added two new steps to the plan that
+were still in progress when the measurement window ended, and no completed step differed from
+the plan.
+
 The standby took over in about 17 s, which is the 15 s lease plus up to one 5 s tick, and C1
 kept its pods during the handover. Lifeboat itself is light: 20–26 millicores of CPU and about
 115 MiB of memory.
