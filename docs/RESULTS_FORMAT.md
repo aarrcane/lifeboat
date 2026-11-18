@@ -6,10 +6,10 @@ setup** (proposal Section 6) and put every run in the same CSV with a `run` colu
 
 | Exp | CSV | Produced by | Status |
 | --- | --- | --- | --- |
-| E1/E2 | `e1_e2_summary.csv`, `runs/<setup>-<run>/timeline.csv` | `scripts/run_experiment.py` on the cluster | needs cluster runs. The old model numbers are in `model/e1_e2_model.csv` (`scripts/run_p5_baseline.py --dry-run`): a model prediction, never a result |
-| E3 | `e3_work_saved.csv` | `scripts/run_experiment.py` from the worker events (`lifeboat/e3_collect.py`) | needs cluster runs |
+| E1/E2 | `e1_e2_summary.csv`, `runs/<setup>-<run>/timeline.csv` | `scripts/run_experiment.py` on the cluster | **done** (AWS, 3 runs per setup, 14-15 Nov). The old model numbers are in `model/e1_e2_model.csv` (`scripts/run_p5_baseline.py --dry-run`): a model prediction, never a result |
+| E3 | `e3_work_saved.csv` | `scripts/run_experiment.py` from the worker events (`lifeboat/e3_collect.py`) | **done** (same AWS runs) |
 | E4 | `e4_alerts.csv` | `scripts/export_e4.py` (P2's evaluation) | done (offline replay through the real voter) |
-| E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` on the cluster (P3 + P6) | **missing**: needs a cluster run |
+| E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` on the cluster (P3 + P6) | `kill-active` done on AWS (3 kills); `kill-active-x3` not run yet |
 
 ## E1/E2 `e1_e2_summary.csv` (`scripts/run_experiment.py`)
 

@@ -1,7 +1,18 @@
-# Demo video plan (P6)
+# Video plan (P6)
 
 Story from WORK_SPLIT R6.7: **normal → warning → L1 → L2 → kill executor → recovery → restore.**
-Target length about 5 minutes. Record on the AWS cluster if it's up, otherwise on k3d.
+**Length: 10 to 15 minutes** (the brief: implementation, functionality and design justification,
+not only the demo). Record on the AWS cluster if it's up, otherwise on k3d.
+
+| Part | Minutes | Content | Who |
+| --- | --- | --- | --- |
+| A. Problem and idea | 0:00-2:00 | flash-flood surge on a shared cluster; Kubernetes reacts after overload; use the warning time; the 4 tiers | R6 |
+| B. Design and why | 2:00-5:00 | Figure 1; 2-of-3 vote (one bad source only reaches L1); Holt forecast and why not ARIMA/ML; greedy "least work lost" planner; Lease + takeover number + written plan; checkpoint data-first | R2, R3, R1 |
+| C. Implementation tour | 5:00-7:30 | `voter.py`, `planner.py`, `executor.py` (plan first, idempotent steps), TriagePlan CR, RBAC per namespace, CronJob feeds, CI with a real k3s API server | R1, R4 |
+| D. Live demo | 7:30-12:00 | the shot list below (shots 2-7) | all |
+| E. Results and limits | 12:00-14:00 | E1-E5 figures; 2.5x more emergency requests served in time; the honest limits (sizing from served traffic, 1-minute calm period in experiments, cost to batch work) | R5, R6 |
+
+The brief asks each member to explain their own part: everyone speaks at least once.
 
 ## Before recording
 
@@ -29,7 +40,7 @@ kubectl -n monitoring port-forward svc/kps-grafana 3000:80     # Grafana at http
 | 5 | 2:20 | Surge arrives | (Locust in `make demo`) | RPS climbs, forecast ratio crosses the Y line, S3 votes too; C1 p95 rises, L3 adds pods | "The traffic arrives after the room was made. A 20x surge still hurts at first, but on AWS C1 reached full capacity in 77 s, against 163 s for an autoscaler." |
 | 6 | 2:50 | Kill the active executor | `kubectl -n lifeboat delete pod <holder> --grace-period=0 --force` | Lease holder changes, takeover number +1, **no LifeboatNoActiveExecutor alert**, plan steps still complete | "We crash the active executor mid-triage. The standby takes the Lease with a higher takeover number and finishes the plan." |
 | 7 | 3:40 | Recovery | (replay ends) | votes drop, level steps down one per calm period, C3/C4 resume from checkpoint | "When the warnings stop, Lifeboat waits for a calm period and steps down slowly." |
-| 8 | 4:20 | Restore + results | `python scripts/plot_results.py` | E1–E5 figures | "Everything is back at its original settings. Measured on AWS, 3 runs each: full capacity 77 s into the surge against 163 s for HPA, p95 2.9 s against 5 s, no batch work lost, and takeover in 17 s." |
+| 8 | (part E) | Restore + results | `python scripts/plot_results.py` | E1–E5 figures | "Everything is back at its original settings. Measured on AWS, 3 runs each: full capacity 77 s into the surge against 163 s for HPA, p95 2.9 s against 5 s, no batch work lost, and takeover in 17 s." |
 
 ## Tips
 

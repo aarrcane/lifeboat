@@ -35,5 +35,5 @@ def level_from_payload(payload) -> int:
 
 
 def handle(event=None, context=None):
-    level = level_from_payload(common.get_json(NEA_URL))
+    level = level_from_payload(common.check_datagov(common.get_json(NEA_URL), "readings"))
     return {"source": "S2", "level": level, "sent": common.send(common.make_reading("S2", level, TTL_S))}

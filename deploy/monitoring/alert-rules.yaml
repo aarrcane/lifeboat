@@ -46,6 +46,12 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: "Two replicas think they are active: fencing should stop the older one"
+        - alert: LifeboatLoopStalled
+          expr: max(lifeboat_loop_age_seconds) > 30
+          for: 15s
+          labels: {severity: critical}
+          annotations:
+            summary: "A Lifeboat control loop has not finished a tick for over 30 s"
         - alert: LifeboatForgedReadings
           expr: sum(increase(lifeboat_rejected_readings_total{reason="bad_signature"}[5m])) > 0
           labels: {severity: warning}

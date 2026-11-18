@@ -50,5 +50,5 @@ def level_from_payload(payload) -> int:
 
 
 def handle(event=None, context=None):
-    level = level_from_payload(common.get_json(PUB_URL))
+    level = level_from_payload(common.check_datagov(common.get_json(PUB_URL), "records"))
     return {"source": "S1", "level": level, "sent": common.send(common.make_reading("S1", level, TTL_S))}

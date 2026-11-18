@@ -1,3 +1,7 @@
+# Least privilege: Lifeboat may only CHANGE things in its own namespace (Lease, TriagePlan,
+# override ConfigMap) and in the workload namespace (pause Jobs, scale Deployments, C2's
+# feature ConfigMap). Cluster-wide it only reads nodes and pods (free CPU), plus what Kopf
+# needs to start. `make itest` runs as this ServiceAccount, so a missing verb fails there.
 apiVersion: v1
 kind: ServiceAccount
 metadata: {name: lifeboat, namespace: lifeboat}
@@ -7,12 +11,6 @@ kind: ClusterRole
 metadata: {name: lifeboat}
 rules:
   - {apiGroups: [""], resources: [nodes, pods], verbs: [get, list, watch]}
-  - {apiGroups: [""], resources: [configmaps], verbs: [get, list, patch]}
-  - {apiGroups: [batch], resources: [jobs], verbs: [get, list, patch]}
-  - {apiGroups: [apps], resources: [deployments], verbs: [get, list]}
-  - {apiGroups: [apps], resources: [deployments/scale], verbs: [get, patch]}
-  - {apiGroups: [coordination.k8s.io], resources: [leases], verbs: [get, create, update, patch]}
-  - {apiGroups: [lifeboat.sit.edu], resources: [triageplans], verbs: [get, list, watch, create, update, patch]}
   - {apiGroups: [apiextensions.k8s.io], resources: [customresourcedefinitions], verbs: [list, watch]}
   - {apiGroups: [""], resources: [namespaces], verbs: [list, watch]}
 ---
@@ -20,4 +18,35 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata: {name: lifeboat}
 roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: lifeboat}
+subjects: [{kind: ServiceAccount, name: lifeboat, namespace: lifeboat}]
+---
+# own state: executor Lease, TriagePlan, shared human override
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: lifeboat-system, namespace: lifeboat}
+rules:
+  - {apiGroups: [coordination.k8s.io], resources: [leases], verbs: [get, create, update, patch]}
+  - {apiGroups: [lifeboat.sit.edu], resources: [triageplans], verbs: [get, list, watch, create, update, patch]}
+  - {apiGroups: [""], resources: [configmaps], verbs: [get, create, patch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: lifeboat-system, namespace: lifeboat}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: lifeboat-system}
+subjects: [{kind: ServiceAccount, name: lifeboat, namespace: lifeboat}]
+---
+# the tiered workloads Lifeboat triages
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: lifeboat-triage, namespace: lifeboat-demo}
+rules:
+  - {apiGroups: [batch], resources: [jobs], verbs: [get, list, patch]}
+  - {apiGroups: [apps], resources: [deployments], verbs: [get, list]}
+  - {apiGroups: [apps], resources: [deployments/scale], verbs: [get, patch]}
+  - {apiGroups: [""], resources: [configmaps], verbs: [get, list, patch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: lifeboat-triage, namespace: lifeboat-demo}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: lifeboat-triage}
 subjects: [{kind: ServiceAccount, name: lifeboat, namespace: lifeboat}]

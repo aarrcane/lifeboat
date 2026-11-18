@@ -55,7 +55,6 @@ def test_l3_pauses_all_and_degrades_c2():
 
 
 # ---- A7: C1 sizing rules (forecast clamp, L2 pre-size, ratchet)
-import math  # noqa: E402
 
 from lifeboat import ingest  # noqa: E402
 from lifeboat.forecast import TrafficForecaster  # noqa: E402

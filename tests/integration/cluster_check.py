@@ -6,6 +6,8 @@ and the TriagePlan:
   1. L2 from two sources -> exactly one executor acts; plan written first; C4 paused, placeholders gone
   2. the active executor stops -> the standby takes the Lease, stamps takeover 2, the old one can't act
   3. readings expire -> level steps down, every step is undone, workloads match their originals
+  4. a human override sent to the STANDBY is stored for both replicas (ConfigMap
+     lifeboat-override), the leader acts on it (L3: C2 degraded), and clearing it steps back down
 
 Needs only the API server (no images, no Prometheus): works on k3d, the AWS cluster, or a
 control-plane-only k3s (`k3s server --disable-agent`, which CI uses).
@@ -27,7 +29,7 @@ logging.getLogger("lifeboat.monitor").setLevel(logging.ERROR)   # no Prometheus 
 
 from lifeboat.config import Config            # noqa: E402
 from lifeboat.controller import Lifeboat      # noqa: E402
-from lifeboat.models import Reading           # noqa: E402
+from lifeboat.models import Level, Reading    # noqa: E402
 from lifeboat.signing import sign             # noqa: E402
 
 ADMIN = os.environ["ADMIN_KUBECONFIG"]        # used only to observe the cluster, never to act
@@ -126,6 +128,30 @@ def main():
     print("   plan: ", plan())
     check("level back to 0", plan().startswith("0 "))
     check("every workload back to its original settings", cluster_state() == before)
+
+    print("\n4. human override sent to the standby replica reaches the leader")
+    leader, other = standby, active
+    other._override(Level.L3, "itest-operator")            # as POST /override on the standby pod
+    for _ in range(5):
+        other.step()
+        leader.step()
+        time.sleep(1)
+    override_cm = k("-n", "lifeboat", "get", "configmap", "lifeboat-override", "-o", "jsonpath={.data.level}")
+    print("   override ConfigMap level:", override_cm, "; plan:", plan())
+    check("override stored in the ConfigMap", override_cm == "3")
+    check("standby follows the override", other.voter.level == Level.L3)
+    check("leader acted on it: plan at level 3", plan().startswith("3 "))
+    check("C2 extras switched off at L3", cluster_state()["c2.degraded"] == "true")
+    leader._override(None, "itest-operator")                # cleared through the other pod
+    for _ in range(120):
+        leader.step()
+        other.step()
+        time.sleep(1)
+        if cluster_state() == before and plan().startswith("0 ") and plan().endswith("steps="):
+            break
+    print("   plan: ", plan())
+    check("override cleared on both replicas", leader.voter.override is None and other.voter.override is None)
+    check("stepped back down, workloads restored", cluster_state() == before)
 
     print("\nRESULT:", "ALL PASSED" if not failures else f"{len(failures)} FAILED: {failures}")
     return 1 if failures else 0

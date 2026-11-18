@@ -39,6 +39,7 @@ class Config:
     # --- C1 health (L3 trigger)
     c1_latency_target_s: float = 0.5
     prometheus_url: str = "http://prometheus-operated.monitoring.svc:9090"
+    prometheus_timeout_s: float = 1.0    # 3 queries a tick: a dead Prometheus must not delay the Lease renewal
     q_cluster_rps: str = "sum(rate(http_requests_total[1m]))"
     q_c1_rps: str = 'sum(rate(http_requests_total{tier="C1"}[1m]))'
     q_c1_p95: str = (
@@ -66,6 +67,9 @@ class Config:
     # --- executor / loop
     tick_s: float = 5.0
     checkpoint_wait_s: float = 6.0       # ONE wait per tick for all pauses; kept < lease_duration_s / 2
+    checkpoint_cache_s: float = 30.0     # planner's view of "last checkpoint" may be this old
+    api_timeout_s: float = 5.0           # every Kubernetes API call; no call may hang the loop
+    loop_stall_s: float = 60.0           # /healthz fails when no tick finished for this long
 
     # --- checkpoints
     checkpoint_backend: str = "file"     # "file" | "s3"

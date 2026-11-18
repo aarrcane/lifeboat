@@ -92,7 +92,8 @@ def part3() -> None:
     print("=== Part 3: PromQL contract & Prometheus-down safety ===")
     exposed = _webapp_metrics()
     from prometheus_client import generate_latest
-    import lifeboat.metrics  # noqa: F401  (registers lifeboat_* gauges)
+    import importlib
+    importlib.import_module("lifeboat.metrics")             # registers the lifeboat_* gauges
     exposed += generate_latest().decode()
     for name in ("q_cluster_rps", "q_c1_rps", "q_c1_p95"):
         q = getattr(CFG, name)

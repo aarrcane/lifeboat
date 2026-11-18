@@ -6,6 +6,8 @@ from typing import Iterable, Optional
 from .models import Level, Reading
 from .signing import verify
 
+FUTURE_SKEW_S = 30.0          # same tolerance as ingest.MAX_CLOCK_SKEW_S
+
 
 class Voter:
     def __init__(self, secret: str, calm_seconds: float, window_s: float = 600.0,
@@ -33,9 +35,10 @@ class Voter:
         self._calm_since = None
 
     def valid_readings(self, readings: Iterable[Reading], now: float) -> list[Reading]:
-        # expired / unsigned / too old => treated as missing
+        # expired / unsigned / too old / stamped in the future => treated as missing
         return [r for r in readings
-                if r.expires_at > now and now - r.ts <= self.window_s and verify(r, self.secret)]
+                if r.expires_at > now and -FUTURE_SKEW_S <= now - r.ts <= self.window_s
+                and verify(r, self.secret)]
 
     def target(self, readings: Iterable[Reading], now: float, c1_struggling: bool) -> Level:
         valid = self.valid_readings(readings, now)

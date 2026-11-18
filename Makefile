@@ -27,7 +27,8 @@ test:   ## unit tests (no cluster needed)
 itest:  ## cluster check: Lease, TriagePlan, takeover, revert, RBAC (needs `make deploy workloads`)
 	bash scripts/itest.sh
 
-lint:   ## same manifest/script checks as CI (needs yamllint, kubeconform, shellcheck)
+lint:   ## same checks as CI (needs pyflakes, yamllint, kubeconform, shellcheck)
+	python -m pyflakes lifeboat feeds loadtest scripts workloads tests
 	yamllint -c .yamllint deploy .github
 	kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 deploy deploy/jobs deploy/monitoring deploy/feeds deploy/baselines
 	shellcheck scripts/*.sh scripts/*/*.sh
@@ -98,8 +99,10 @@ load: ## start the 20x Locust surge from inside the cluster (STAGES, default 6 m
 demo: deploy workloads wait load ## deploy, then the surge plus the experiment warnings at speed 1 (alert leads the surge by 60 s)
 	$(MAKE) replay SCENARIO=data/scenario_experiment.jsonl SPEED=1
 	@echo
-	@echo "Demo running (about 8 min): L2 at t=90 s, surge t=150-330 s, back to L0 after the calm period."
+	@echo "Demo running: L2 at t=90 s, surge t=150-330 s, then one level down per calm period"
+	@echo "(5 min by default, so L3 -> L0 takes about 15 min after the surge; about 3 min with a 1-minute calm period)."
 	@echo "For the video, shorten the calm period first: kubectl -n lifeboat set env deploy/lifeboat LIFEBOAT_CALM_MINUTES=1"
+	@echo "and afterwards restore it: kubectl -n lifeboat set env deploy/lifeboat LIFEBOAT_CALM_MINUTES-"
 	@echo "Watch it with:"
 	@echo "  kubectl -n lifeboat get triageplans -w"
 	@echo "  kubectl -n lifeboat logs -f job/replay"

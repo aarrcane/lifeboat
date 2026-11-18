@@ -15,7 +15,7 @@ Rule of thumb: each role owns files (below) -> fewer merge conflicts. Work on fe
 ## Shared first step (everyone, day 1-2, ~1 h)
 1. R4 creates the GitHub repo, pushes this code, enables branch protection on `main` (1 review + CI green), adds everyone.
 2. Everyone: clone, `pip install -r requirements-dev.txt`, `make test` (should show all green), read `README.md` and proposal Sections 4 and Appendix D.
-3. Create GitHub Issues from the checklists below; label by role and by milestone (`progress-29oct`, `final-15nov`).
+3. Create GitHub Issues from the checklists below; label by role and by milestone (`progress-27oct`, `final-20nov`).
 
 ---
 ## R1 - Executor & HA lead
@@ -104,7 +104,7 @@ By 20 Nov
 | **27 Oct** | **Progress demo** |
 | 30 Oct-5 Nov | Feeds live via OpenFaaS, restore checks, forecast tuning, AWS setup |
 | 6-11 Nov | All five experiments, 3 runs each on AWS EC2 |
-| 12-14 Nov | Report, video, polish, freeze `main` on 13 Nov |
+| 12-19 Nov | Report, video, polish; freeze `main` before recording the video |
 | **20 Nov** | **Final submission** (23:59) |
 | **2 Dec** | **Dell Cloud Native Award presentation** |
 

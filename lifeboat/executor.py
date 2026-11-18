@@ -104,7 +104,7 @@ class Executor:
             if reverted:
                 del rec.steps[key]
                 changed = True
-                break
+            break                                                # ONE undo per tick, confirmed or not
         if changed:
             self.store.put(rec)
 

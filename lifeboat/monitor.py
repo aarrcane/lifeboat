@@ -19,7 +19,8 @@ class Monitor:
 
     def query(self, q: str) -> Optional[float]:
         try:
-            r = requests.get(f"{self.cfg.prometheus_url}/api/v1/query", params={"query": q}, timeout=3)
+            r = requests.get(f"{self.cfg.prometheus_url}/api/v1/query", params={"query": q},
+                             timeout=self.cfg.prometheus_timeout_s)
             res = r.json()["data"]["result"]
             if not res:
                 return None
