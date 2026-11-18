@@ -64,6 +64,9 @@ PANELS = [
     ("Rejected readings (forged / expired)", "timeseries",
      [("sum(increase(lifeboat_rejected_readings_total[5m])) by (reason)", "{{reason}}")],
      {"x": 8, "y": 21, "w": 8, "h": 8}, {"decimals": 0}),
+    ("Human overrides", "timeseries",
+     [("sum(increase(lifeboat_overrides_total[5m]))", "overrides")],
+     {"x": 0, "y": 29, "w": 8, "h": 8}, {"decimals": 0}),
     ("Free CPU in cluster (millicores)", "timeseries",
      [('1000 * (sum(kube_node_status_allocatable{resource="cpu"})'
        ' - sum(kube_pod_container_resource_requests{resource="cpu"}))', "free mCPU")],

@@ -12,7 +12,7 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 | `lifeboat/k8s_actions.py`, `checkpoint.py` | target-state actions; checkpoint-before-pause contract (S3) | Table 1 #3 |
 | `lifeboat/forecast.py`, `monitor.py` | Holt forecast (S3), Prometheus + C1-struggling (L3) | Sec. 4 |
 | `lifeboat/forecast_eval.py`, `scripts/demo_p6.py` | forecast benchmark + alpha/beta/horizon sweep | E4 (S3) |
-| `scripts/make_dashboard.py`, `deploy/monitoring/grafana-dashboard.yaml` | Grafana dashboard (11 panels) | E1-E5 |
+| `scripts/make_dashboard.py`, `deploy/monitoring/grafana-dashboard.yaml` | Grafana dashboard (12 panels) | E1-E5 |
 | `scripts/p6_live_check.py` | real Prometheus + webapp + Lifeboat loop, no cluster | E1-E5 |
 | `deploy/monitoring/alert-rules.yaml` | 8 Prometheus alerts, drawn on the dashboard | video |
 | `scripts/plot_results.py`, `export_e4.py`, `e5_crash_test.py` | results CSVs -> figures; E4 export; E5 kill test on a cluster | E1-E5 |
@@ -63,6 +63,7 @@ curl -s -X POST localhost:8081/override -H "X-Lifeboat-Token: $TOKEN" -d '{"leve
 - **Measured on AWS** (3 x t3.large, k3s with embedded etcd): E1-E3 for B0, B1, B2 and Lifeboat, 3 runs each (`results/e1_e2_summary.csv`, `results/runs/`); E5 kill test (`results/e5_crash.csv`); evidence in `results/aws_evidence/`. E4 is an offline replay through the real voter (`results/e4_alerts.csv`).
 - **Unit tests** (`make test`): voter, ingest validation, planner, executor crash/takeover and one-undo-per-tick, forecast, checkpoint, discovery, feed parsers, controller ticks (takeover keeps the crisis, outage silences the forecast vote, override shared across replicas).
 - **Integration test** (`make itest`, also in CI) against a real k3s API server as the lifeboat ServiceAccount, so the namespaced RBAC is checked too: L2 triage, standby takeover with fencing, revert to original settings, and a human override sent to the standby that the leader carries out.
+- **P6 monitoring and forecast**: every dashboard query, the PromQL in `config.py` and the alert rules checked against a real Prometheus scraping the real webapp (`scripts/p6_live_check.py`, no cluster). Forecast alpha tuned to 0.3 by `scripts/demo_p6.py` on synthetic traces; the sweep was re-run after the forecast clamp fix (f8007ba) with the same result: 81 s lead on a gradual surge, 0 false L2. Not yet confirmed on the AWS cluster: PodMonitor scraping and the Grafana sidecar loading the dashboard.
 - **Shared between replicas** through etcd: the TriagePlan (level, steps, takeover number) and the human override. Still per replica: the calm-period timer (a new leader steps down one calm period after it took over) and the reading book (feeds send every reading to both pods).
 - **Known limits** (also in the report): C1 is sized from the traffic it *serves*, so a sudden surge is followed step by step; the planner checks cluster-wide free CPU, not per-node fit; Lease expiry assumes NTP-synchronised clocks; the experiments shorten the calm period to 1 minute; one signing key for all feeds and the override.
 - Everyone deploying to the same cluster needs the same `.env` (shared privately, see docs/CLUSTER.md).
