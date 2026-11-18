@@ -1,15 +1,14 @@
-# Work split for 6 members
+# Work split for 5 members
 
 Deadlines: **27 Oct** progress demo, **20 Nov** final (video + report + AWS run), **2 Dec** Dell Cloud Native Award presentation.
 Rule of thumb: each role owns files (below) -> fewer merge conflicts. Work on feature branches, PR into `main`, one reviewer per PR (reviewer pairs listed). Run `make test` before every PR.
 
 | # | Role | Owns | Experiments | Review buddy |
 |---|------|------|-------------|--------------|
-| R1 | Executor & HA lead (tech lead) | `executor.py`, `lease.py`, `plan_store.py`, `k8s_plan_store.py`, `k8s_actions.py`, `tests/test_executor.py` | E5 | R4 |
+| R1/R3 | Planner, Checkpointing, Executor & HA lead (tech lead) | `planner.py`, `checkpoint.py`, `discovery.py`, `workloads/worker/`, `executor.py`, `lease.py`, `plan_store.py`, `k8s_plan_store.py`, `k8s_actions.py`, planner/checkpoint/discovery/executor tests | E3, E5 | R4 |
 | R2 | Signals & Voter | `voter.py`, `signing.py`, `ingest.py`, `feeds/`, `scripts/make_scenario.py` | E4 | R6 |
-| R3 | Planner & Checkpointing | `planner.py`, `checkpoint.py`, `discovery.py`, `workloads/worker/` | E3 | R1 |
-| R4 | Cluster & DevOps | `deploy/`, Dockerfiles, `Makefile`, CI, k3s HA, AWS EC2, S3/MinIO, repo admin | infra for all | R1 |
-| R5 | Workloads, Load & Baselines | `workloads/webapp/`, `loadtest/`, B0/B1/B2 configs | E1, E2 | R3 |
+| R4 | Cluster & DevOps | `deploy/`, Dockerfiles, `Makefile`, CI, k3s HA, AWS EC2, S3/MinIO, repo admin | infra for all | R1/R3 |
+| R5 | Workloads, Load & Baselines | `workloads/webapp/`, `loadtest/`, B0/B1/B2 configs | E1, E2 | R1/R3 |
 | R6 | Observability, Forecast & Report | `forecast.py`, `monitor.py`, `metrics.py`, Grafana dashboards, report + video | E1-E5 plots | R2 |
 
 ## Shared first step (everyone, day 1-2, ~1 h)
@@ -18,18 +17,22 @@ Rule of thumb: each role owns files (below) -> fewer merge conflicts. Work on fe
 3. Create GitHub Issues from the checklists below; label by role and by milestone (`progress-27oct`, `final-20nov`).
 
 ---
-## R1 - Executor & HA lead
-**Goal:** a crash at any point never leaves triage half done; the standby finishes it (challenges 2 and 4).
+## R1/R3 - Planner, Checkpointing, Executor & HA
+**Goal:** pause the cheapest work first, preserve its progress, and ensure a standby safely finishes triage without duplicated or lost actions (challenges 2, 3 and 4).
 By 27 Oct
 1. Run `lifeboat/lease.py` against k3s (use R4's cluster): start two controller pods, confirm only one has `lifeboat_is_active_executor=1`; `kubectl delete pod` the active one, confirm the other takes over and `leaseTransitions` increments.
 2. Exercise `K8sPlanStore`: `kubectl get triageplans current -o yaml`; verify `resourceVersion` conflicts are retried and that a write with a lower takeover raises `Fenced`.
 3. Verify `K8sActions` per action type (suspend Job, scale Deployment, patch ConfigMap) are idempotent: apply twice, state identical; revert restores original.
 4. Run the **executor kill test** (progress milestone): trigger L2, `kubectl delete pod` the active executor mid-plan, show the plan finishes with takeover number 2 and no step is half done. Capture logs/screens for the report.
+5. Run `tests/test_planner.py`, `tests/test_discovery.py`, `tests/test_forecast_checkpoint.py` and `tests/test_executor.py`; add edge cases for no C3/C4, shortfall larger than all candidates, overdue backup and repeated replanning.
+6. Verify S3/MinIO checkpoint save-before-pause: `latest.json` is written after data, workers resume from the saved unit, and lifecycle events are preserved for E3.
 By 20 Nov
-5. Close the "late write by old executor" gap noted in Algorithm 3: before each `apply`, `still_leader()` is checked; add a chaos test that pauses the old executor (SIGSTOP), lets the lease expire, resumes it, and shows its write is fenced.
-6. Slow, ordered revert: confirm one step undone per tick and `is_reverted` checks original settings; add tuning knob for revert pace.
-7. E5 with R6: kill active executor, kill executor pods repeatedly, cut a feed; record "nothing done twice or left half done"; measure Lifeboat CPU/memory (`kubectl top`).
-8. Write the HA/fencing sections of the report (Table 1 rows 2 and 4, Figure 2).
+7. Close the "late write by old executor" gap noted in Algorithm 3: before each `apply`, `still_leader()` is checked; add a chaos test that pauses the old executor (SIGSTOP), lets the lease expire, resumes it, and shows its write is fenced.
+8. Slow, ordered revert: confirm one step undone per tick and `is_reverted` checks original settings; add tuning knob for revert pace.
+9. Measure E3: progress lost, checkpoint save age, time until every paused workload is back, and compare greedy, random and largest-first pause ordering.
+10. Check stability: planner uses pre-triage inputs (`apply_originals`, `delta_millis`) and applying then re-planning gives the same steps.
+11. E5 with R6: kill active executor, kill executor pods repeatedly, cut a feed; record "nothing done twice or left half done"; measure Lifeboat CPU/memory (`kubectl top`).
+12. Write the planner, checkpoint, HA/fencing sections of the report (Algorithm 2, Table 1 rows 2-4, Figure 2, E3/E5 data).
 
 ## R2 - Signals & Voter
 **Goal:** unreliable warnings never trigger big pauses (challenge 1).
@@ -43,19 +46,6 @@ By 20 Nov
 6. Build 3 replay scenarios for E4 (noisy, conflicting, no-crisis) plus the main flash flood; extend `scripts/make_scenario.py`.
 7. E4: count false alarms, missed crises, level flips; compare with a naive "any source -> L2" voter (write it as a flag for comparison).
 8. Document the human-override endpoint (`POST /override` with `X-Lifeboat-Token`) and make sure every override is logged.
-
-## R3 - Planner & Checkpointing
-**Goal:** pause the cheapest work first and never lose it (challenge 3).
-By 27 Oct
-1. Read `planner.py`; run `tests/test_planner.py`; add 3+ edge-case tests (no C3/C4 present, shortfall bigger than all candidates, overdue backup).
-2. Run `workloads/worker` locally with `LIFEBOAT_CHECKPOINT_BACKEND=file`: start, `kill -TERM`, restart; it must resume from the saved unit. Test the "save now" request path with `CheckpointStore.request()`.
-3. Switch the worker to S3/MinIO (R4 provides endpoint + keys); confirm the manifest (`latest.json`) is written **after** the data object.
-4. Verify `discovery.list_workloads` reads tiers, restart-seconds and overdue annotations from the demo Jobs (`deploy/04-demo-workloads.yaml`).
-By 20 Nov
-5. Validate that paused Jobs resume from checkpoint on un-suspend (Job pods are recreated); measure "progress lost" and "time until everything is back" for E3.
-6. Tune scoring `freed / (work since checkpoint + restart time)`; run a comparison against random order and "largest first" to justify the greedy rule.
-7. Check the stability rule: planner uses pre-triage inputs (`apply_originals`, `delta_millis`) - add a test that applying the plan then re-planning gives the same steps.
-8. E3 data + report section for Algorithm 2 and Table 1 row 3.
 
 ## R4 - Cluster & DevOps
 **Goal:** everyone can deploy in one command; final run on AWS.

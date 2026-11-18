@@ -7,8 +7,8 @@ not only the demo). Record on the AWS cluster if it's up, otherwise on k3d.
 | Part | Minutes | Content | Who |
 | --- | --- | --- | --- |
 | A. Problem and idea | 0:00-2:00 | flash-flood surge on a shared cluster; Kubernetes reacts after overload; use the warning time; the 4 tiers | R6 |
-| B. Design and why | 2:00-5:00 | Figure 1; 2-of-3 vote (one bad source only reaches L1); Holt forecast and why not ARIMA/ML; greedy "least work lost" planner; Lease + takeover number + written plan; checkpoint data-first | R2, R3, R1 |
-| C. Implementation tour | 5:00-7:30 | `voter.py`, `planner.py`, `executor.py` (plan first, idempotent steps), TriagePlan CR, RBAC per namespace, CronJob feeds, CI with a real k3s API server | R1, R4 |
+| B. Design and why | 2:00-5:00 | Figure 1; 2-of-3 vote (one bad source only reaches L1); Holt forecast and why not ARIMA/ML; greedy "least work lost" planner; Lease + takeover number + written plan; checkpoint data-first | R2, R1/R3 |
+| C. Implementation tour | 5:00-7:30 | `voter.py`, `planner.py`, `executor.py` (plan first, idempotent steps), TriagePlan CR, RBAC per namespace, CronJob feeds, CI with a real k3s API server | R1/R3, R4 |
 | D. Live demo | 7:30-12:00 | the shot list below (shots 2-7) | all |
 | E. Results and limits | 12:00-14:00 | E1-E5 figures; 2.5x more emergency requests served in time; the honest limits (sizing from served traffic, 1-minute calm period in experiments, cost to batch work) | R5, R6 |
 

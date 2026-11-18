@@ -320,9 +320,8 @@ agree (NTP).
 
 | Role | Member | Main work |
 | --- | --- | --- |
-| P1 Executor, HA & chaos | TODO | executor, Lease and takeover, crash tests (E5) |
+| P1/P3 Planner, checkpoints, executor, HA & chaos | TODO (R1/R3 merged role) | planner and greedy ordering, checkpoint-before-pause, discovery, Lease/takeover, safe execution and crash tests (E3/E5) |
 | P2 Signals, voter & feeds | Lucas Leow (2502908) | signing, ingest, 2-of-3 voter, PUB/NEA live feeds, E4 scenarios |
-| P3 Planner & checkpoints | TODO | planner, checkpointing, batch jobs (E3) |
 | P4 Cluster, deploy & AWS | TODO | 3-server k3s, one-command deploy, AWS EC2 and S3, CI |
 | P5 Web load & baselines | TODO | web app, Locust surge, B0–B2, experiment runner (E1/E2) |
 | P6 Observability & forecast | Muhammad 'Afif Bin Muhd Lotfi Jarhom (2500708) | forecast tuning, monitoring and alerts, dashboard, results pipeline, report, video |
