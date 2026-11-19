@@ -196,8 +196,9 @@ first, and re-ran all 12 runs.
 | **Lifeboat** | **7** | **77 s (76–79)** | **7,698 (47 %)** | **2.9 s** | **41 %** |
 
 *Means of 3 runs. Requests served: C1 requests answered within 0.5 s during the 3-minute surge
-(21,600 were offered: 120 users, one request per second each); in brackets, the share of the
-requests actually sent.*
+(21,600 were offered: 120 users, one request per second each), computed from the `RESULT` lines in
+`results/runs/*/locust.log` (`requests - failures`, with summary percentages in
+`results/e1_e2_summary.csv`); in brackets, the share of the requests actually sent.*
 
 ![Figure 2. Ready C1 pods over time, one line per setup. Lifeboat starts growing before the surge at t = 150 s.](../../results/figures/e1_timeline.png)
 
@@ -320,10 +321,10 @@ agree (NTP).
 
 | Role | Member | Main work |
 | --- | --- | --- |
-| P1/P3 Planner, checkpoints, executor, HA & chaos | TODO (R1/R3 merged role) | planner and greedy ordering, checkpoint-before-pause, discovery, Lease/takeover, safe execution and crash tests (E3/E5) |
+| P1/P3 Planner, checkpoints, executor, HA & chaos | Cheung Kai Chun Ronald (2500507) | planner and greedy ordering, checkpoint-before-pause, discovery, Lease/takeover, safe execution and crash tests (E3/E5) |
 | P2 Signals, voter & feeds | Lucas Leow (2502908) | signing, ingest, 2-of-3 voter, PUB/NEA live feeds, E4 scenarios |
-| P4 Cluster, deploy & AWS | TODO | 3-server k3s, one-command deploy, AWS EC2 and S3, CI |
-| P5 Web load & baselines | TODO | web app, Locust surge, B0–B2, experiment runner (E1/E2) |
+| P4 Cluster, deploy & AWS | Hanzalah Bin Mohamad Hisam (2500949) | 3-server k3s, one-command deploy, AWS EC2 and S3, CI |
+| P5 Web load & baselines | Faris Zharfan (2500841) | web app, Locust surge, B0–B2, experiment runner (E1/E2) |
 | P6 Observability & forecast | Muhammad 'Afif Bin Muhd Lotfi Jarhom (2500708) | forecast tuning, monitoring and alerts, dashboard, results pipeline, report, video |
 
 ## References
