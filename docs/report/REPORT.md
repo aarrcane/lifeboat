@@ -126,7 +126,7 @@ used, and on resume it continues from there.
 | Controller | Python with Kopf, 2 copies, leader election with a Lease |
 | Warning feeds | Kubernetes CronJobs calling the live data.gov.sg APIs; a reply they cannot read sends nothing |
 | Checkpoints | Amazon S3 (MinIO on laptops) |
-| Monitoring | Prometheus and Grafana, a 12-panel dashboard and 8 alerts |
+| Monitoring | Prometheus and Grafana, an 18-panel dashboard in five sections and 8 alerts |
 
 **Fault tolerance at every layer.** All three AWS machines are k3s *servers* that share the
 cluster database, so losing any one of them still leaves a working majority, and Lifeboat's

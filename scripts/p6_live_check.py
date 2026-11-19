@@ -313,8 +313,9 @@ def main() -> int:
         config_checks = {"q_cluster_rps": mon.query(cfg.q_cluster_rps), "q_c1_rps": mon.query(cfg.q_c1_rps),
                          "q_c1_p95": mon.query(cfg.q_c1_p95)}
         panel_rows = []
-        for title, _kind, targets, _grid, _d in PANELS:
-            for q, _legend in targets:
+        for panel in PANELS:
+            title = panel["title"]
+            for q in (t["expr"] for t in panel.get("targets", [])):
                 res = instant(q)
                 cluster_only = "kube_" in q
                 panel_rows.append({"panel": title, "query": q, **res,

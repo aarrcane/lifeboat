@@ -147,7 +147,7 @@ def test_dashboard_covers_work_split_panels_and_known_metrics():
     from prometheus_client.metrics import MetricWrapperBase
     exported = {mm.describe()[0].name for mm in vars(m).values() if isinstance(mm, MetricWrapperBase)}
     d = _dashboard()
-    exprs = " ".join(t["expr"] for p in d["panels"] for t in p["targets"])
+    exprs = " ".join(t["expr"] for p in d["panels"] for t in p.get("targets", []))
     for needed in ("lifeboat_level", "lifeboat_source_level", "lifeboat_plan_steps",
                    "lifeboat_is_active_executor", "lifeboat_takeover_number", "lifeboat_overrides_total",
                    "http_request_duration_seconds"):
@@ -156,6 +156,23 @@ def test_dashboard_covers_work_split_panels_and_known_metrics():
         base = name.removesuffix("_total")
         assert base in exported, f"dashboard uses unknown metric {name}"
     assert len({p["id"] for p in d["panels"]}) == len(d["panels"])
+
+
+def test_dashboard_layout_follows_the_design_rules():
+    d = _dashboard()
+    panels = [p for p in d["panels"] if p["type"] != "row"]
+    assert all(p.get("description") for p in panels)                 # every panel explains itself
+    assert d["panels"][0]["title"] == "Alert level"                   # most important thing top-left
+    for p in panels:                                                  # no overlaps, nothing off-grid
+        g = p["gridPos"]
+        assert g["x"] + g["w"] <= 24
+    cells = [(p["gridPos"]["x"] + i, p["gridPos"]["y"] + j) for p in d["panels"]
+             for i in range(p["gridPos"]["w"]) for j in range(p["gridPos"]["h"])]
+    assert len(cells) == len(set(cells))
+    for p in panels:                                                  # stacking hides data
+        stacking = p["fieldConfig"]["defaults"].get("custom", {}).get("stacking", {"mode": "none"})
+        assert stacking["mode"] == "none"
+    assert "$__" not in " ".join(t["expr"] for p in panels for t in p["targets"])  # p6_live_check runs these
 
 
 def test_alert_rules_are_picked_up_and_use_known_metrics():

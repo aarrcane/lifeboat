@@ -12,15 +12,45 @@ data:
       "uid": "lifeboat-overview",
       "title": "Lifeboat: crisis triage",
       "schemaVersion": 39,
+      "description": "Is there a crisis, what is Lifeboat doing about it, and is the public web service (C1) still fast? Read top to bottom: status, the vote, signals, users, capacity freed, controller health.",
+      "editable": true,
+      "graphTooltip": 1,
       "refresh": "5s",
       "time": {
         "from": "now-30m",
         "to": "now"
       },
+      "timepicker": {
+        "refresh_intervals": [
+          "5s",
+          "10s",
+          "30s",
+          "1m",
+          "5m"
+        ]
+      },
       "tags": [
         "lifeboat",
         "csc3104"
       ],
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "label": "Data source",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {
+              "text": "Prometheus",
+              "value": "prometheus"
+            },
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "options": []
+          }
+        ]
+      },
       "annotations": {
         "list": [
           {
@@ -28,10 +58,10 @@ data:
             "enable": true,
             "datasource": {
               "type": "prometheus",
-              "uid": "prometheus"
+              "uid": "${datasource}"
             },
-            "iconColor": "red",
-            "expr": "changes(max(lifeboat_level)[30s:5s]) > 0",
+            "iconColor": "purple",
+            "expr": "changes(max(lifeboat_level)[10s:5s]) > 0",
             "step": "5s",
             "titleFormat": "Alert level changed"
           },
@@ -40,63 +70,77 @@ data:
             "enable": true,
             "datasource": {
               "type": "prometheus",
-              "uid": "prometheus"
+              "uid": "${datasource}"
             },
             "iconColor": "orange",
             "expr": "ALERTS{alertname=~\"Lifeboat.*\", alertstate=\"firing\", alertname!=\"LifeboatLevelChanged\"}",
             "step": "5s",
             "titleFormat": "{{alertname}}",
-            "textFormat": "{{severity}}"
+            "textFormat": "{{severity}}",
+            "filter": {
+              "exclude": false,
+              "ids": [
+                7
+              ]
+            }
           }
         ]
       },
       "panels": [
         {
-          "id": 1,
-          "title": "Alert level",
           "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 0,
-            "w": 6,
-            "h": 5
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "max(lifeboat_level)",
-              "legendFormat": "level"
-            }
-          ],
+          "title": "Alert level",
+          "description": "Lifeboat's current level. L0 normal, L1 watch (warm up C1), L2 emergency (pause batch work, pre-size C1), L3 critical (C1 is missing its target).",
           "fieldConfig": {
             "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 2
+                  },
+                  {
+                    "color": "red",
+                    "value": 3
+                  }
+                ]
+              },
               "mappings": [
                 {
                   "type": "value",
                   "options": {
                     "0": {
                       "text": "L0 Normal",
-                      "color": "green"
+                      "color": "blue",
+                      "index": 0
                     },
                     "1": {
                       "text": "L1 Watch",
-                      "color": "yellow"
+                      "color": "yellow",
+                      "index": 1
                     },
                     "2": {
                       "text": "L2 Emergency",
-                      "color": "orange"
+                      "color": "orange",
+                      "index": 2
                     },
                     "3": {
                       "text": "L3 Critical",
-                      "color": "red"
+                      "color": "red",
+                      "index": 3
                     }
                   }
                 }
@@ -108,317 +152,56 @@ data:
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ]
-            }
-          }
-        },
-        {
-          "id": 2,
-          "title": "Active executor",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 6,
-            "y": 0,
-            "w": 6,
-            "h": 5
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "max(lifeboat_is_active_executor) by (pod)",
-              "legendFormat": "{{pod}}"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "standby",
-                      "color": "blue"
-                    },
-                    "1": {
-                      "text": "ACTIVE",
-                      "color": "green"
-                    }
-                  }
-                }
-              ]
+              ],
+              "fields": "",
+              "values": false
             },
-            "overrides": []
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "wideLayout": true,
+            "showPercentChange": false
           },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            }
-          }
-        },
-        {
-          "id": 3,
-          "title": "Takeover number",
-          "type": "stat",
+          "id": 1,
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 12,
-            "y": 0,
-            "w": 6,
-            "h": 5
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "max(lifeboat_takeover_number)",
-              "legendFormat": "takeover"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            }
-          }
-        },
-        {
-          "id": 4,
-          "title": "C1 struggling (L3 trigger)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 18,
-            "y": 0,
-            "w": 6,
-            "h": 5
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "max(lifeboat_c1_struggling)",
-              "legendFormat": "struggling"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "OK",
-                      "color": "green"
-                    },
-                    "1": {
-                      "text": "STRUGGLING",
-                      "color": "red"
-                    }
-                  }
-                }
-              ]
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            }
-          }
-        },
-        {
-          "id": 5,
-          "title": "Alert level over time",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "gridPos": {
             "x": 0,
-            "y": 5,
-            "w": 12,
-            "h": 8
+            "y": 0,
+            "w": 6,
+            "h": 5
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "${datasource}"
               },
               "expr": "max(lifeboat_level)",
-              "legendFormat": "Lifeboat level"
-            },
-            {
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "max(lifeboat_source_level) by (source)",
-              "legendFormat": "{{source}} vote"
+              "legendFormat": "level"
             }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "max": 3,
-              "decimals": 0
-            },
-            "overrides": []
-          },
-          "options": {}
+          ]
         },
         {
-          "id": 6,
-          "title": "Forecast traffic / normal (S3)",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 12,
-            "y": 5,
-            "w": 12,
-            "h": 8
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "max(lifeboat_forecast_ratio)",
-              "legendFormat": "forecast ratio"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 2
-                  },
-                  {
-                    "color": "orange",
-                    "value": 4
-                  }
-                ]
-              },
-              "custom": {
-                "thresholdsStyle": {
-                  "mode": "line"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {}
-        },
-        {
-          "id": 7,
-          "title": "Requests per second by tier",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 13,
-            "w": 12,
-            "h": 8
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "sum(rate(http_requests_total[1m])) by (tier)",
-              "legendFormat": "{{tier}}"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "reqps"
-            },
-            "overrides": []
-          },
-          "options": {}
-        },
-        {
-          "id": 8,
-          "title": "C1 p95 response time (target 0.5 s)",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "x": 12,
-            "y": 13,
-            "w": 12,
-            "h": 8
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tier=\"C1\"}[1m])) by (le))",
-              "legendFormat": "C1 p95"
-            }
-          ],
+          "type": "stat",
+          "title": "C1 p95 response time",
+          "description": "95th percentile response time of the public web tier C1 over the last minute. The target is 0.5 s; the number turns red above it.",
           "fieldConfig": {
             "defaults": {
               "unit": "s",
+              "color": {
+                "mode": "thresholds"
+              },
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "blue",
                     "value": null
                   },
                   {
@@ -427,61 +210,441 @@ data:
                   }
                 ]
               },
-              "custom": {
-                "thresholdsStyle": {
-                  "mode": "line"
-                }
-              }
+              "mappings": [],
+              "decimals": 2
             },
             "overrides": []
           },
-          "options": {}
-        },
-        {
-          "id": 9,
-          "title": "Triage plan steps",
-          "type": "timeseries",
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "wideLayout": true,
+            "showPercentChange": false
+          },
+          "id": 2,
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "gridPos": {
-            "x": 0,
-            "y": 21,
-            "w": 8,
-            "h": 8
+            "x": 6,
+            "y": 0,
+            "w": 4,
+            "h": 5
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "${datasource}"
               },
-              "expr": "max(lifeboat_plan_steps) by (state)",
-              "legendFormat": "{{state}}"
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tier=\"C1\"}[1m])) by (le))",
+              "legendFormat": "C1 p95"
             }
-          ],
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "C1 requests on time",
+          "description": "Share of C1 requests answered within 0.5 s over the last minute. Blue at 95 % or more, orange from 90 %, red below that.",
           "fieldConfig": {
             "defaults": {
+              "unit": "percentunit",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.9
+                  },
+                  {
+                    "color": "blue",
+                    "value": 0.95
+                  }
+                ]
+              },
+              "mappings": [],
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "wideLayout": true,
+            "showPercentChange": false
+          },
+          "id": 3,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 10,
+            "y": 0,
+            "w": 4,
+            "h": 5
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(rate(http_request_duration_seconds_bucket{tier=\"C1\", le=\"0.5\"}[1m])) / sum(rate(http_request_duration_seconds_count{tier=\"C1\"}[1m]))",
+              "legendFormat": "on time"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Triage plan",
+          "description": "Steps in the current TriagePlan: done (applied to the cluster) and waiting. Waiting steps are normal for a few seconds after a level change.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "waiting"
+                },
+                "properties": [
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "blue",
+                          "value": null
+                        },
+                        {
+                          "color": "yellow",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value_and_name",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "wideLayout": true,
+            "showPercentChange": false
+          },
+          "id": 4,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 14,
+            "y": 0,
+            "w": 4,
+            "h": 5
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_plan_steps{state=\"done\"})",
+              "legendFormat": "done"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_plan_steps{state=\"pending\"})",
+              "legendFormat": "waiting"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Active executor",
+          "description": "The Lifeboat replica that holds the Lease and is allowed to act. The other replica waits on standby and takes over if this one dies.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "noValue": "None"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "none",
+            "graphMode": "none",
+            "textMode": "name",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "wideLayout": true,
+            "showPercentChange": false
+          },
+          "id": 5,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 0,
+            "w": 3,
+            "h": 5
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max by (pod) (lifeboat_is_active_executor) == 1",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Takeovers",
+          "description": "How many times a standby replica has taken over the plan. It goes up by one after each executor kill test.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
               "decimals": 0
             },
             "overrides": []
           },
-          "options": {}
-        },
-        {
-          "id": 10,
-          "title": "Rejected readings (forged / expired)",
-          "type": "timeseries",
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "none",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "wideLayout": true,
+            "showPercentChange": false
+          },
+          "id": 6,
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "gridPos": {
-            "x": 8,
-            "y": 21,
-            "w": 8,
+            "x": 21,
+            "y": 0,
+            "w": 3,
+            "h": 5
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_takeover_number)",
+              "legendFormat": "takeovers"
+            }
+          ]
+        },
+        {
+          "type": "state-timeline",
+          "title": "How the vote reached this level",
+          "description": "Each lane is one input to the 2-of-3 vote, then the level Lifeboat chose. S1 is PUB flood alerts, S2 NEA rainfall, S3 Lifeboat's own traffic forecast. The last lane shows when C1 missed its target, which forces L3.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#8E8E8E"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "L0 Normal",
+                      "color": "blue",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "L1 Watch",
+                      "color": "yellow",
+                      "index": 1
+                    },
+                    "2": {
+                      "text": "L2 Emergency",
+                      "color": "orange",
+                      "index": 2
+                    },
+                    "3": {
+                      "text": "L3 Critical",
+                      "color": "red",
+                      "index": 3
+                    }
+                  }
+                }
+              ],
+              "custom": {
+                "fillOpacity": 80,
+                "lineWidth": 0
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "C1 response time"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "C1 OK",
+                            "color": "blue",
+                            "index": 0
+                          },
+                          "1": {
+                            "text": "C1 struggling",
+                            "color": "red",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showValue": "auto",
+            "mergeValues": true,
+            "alignValue": "left",
+            "rowHeight": 0.8,
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "id": 7,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 5,
+            "w": 24,
             "h": 8
           },
           "targets": [
@@ -489,32 +652,352 @@ data:
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_source_level{source=\"S1\"})",
+              "legendFormat": "S1 PUB flood alerts"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_source_level{source=\"S2\"})",
+              "legendFormat": "S2 NEA rainfall"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_source_level{source=\"S3\"})",
+              "legendFormat": "S3 traffic forecast"
+            },
+            {
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_level)",
+              "legendFormat": "Lifeboat level"
+            },
+            {
+              "refId": "E",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_c1_struggling)",
+              "legendFormat": "C1 response time"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Warning signals",
+          "collapsed": false,
+          "panels": [],
+          "id": 8,
+          "gridPos": {
+            "x": 0,
+            "y": 13,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Forecast traffic compared with normal",
+          "description": "Lifeboat's Holt forecast of cluster traffic divided by normal traffic (source S3). At 2x it votes L1, at 4x it votes L2; the shaded bands mark those zones.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "suffix:\u00d7",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed+area"
+                }
+              },
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 2.0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 4.0
+                  }
+                ]
+              },
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 9,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 14,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_forecast_ratio)",
+              "legendFormat": "forecast / normal"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Readings rejected",
+          "description": "Readings dropped at ingest in each 5-minute window, by reason. bad_signature means a forged reading; any of these raises the LifeboatForgedReadings alert.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 2,
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                },
+                "axisSoftMax": 3
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "bad_signature"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "red"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "expired"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "malformed"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "yellow"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "future"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#8E8E8E"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 10,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 14,
+            "w": 6,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
               },
               "expr": "sum(increase(lifeboat_rejected_readings_total[5m])) by (reason)",
               "legendFormat": "{{reason}}"
             }
-          ],
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Human overrides",
+          "description": "Times an operator set the level by hand in each 5-minute window.",
           "fieldConfig": {
             "defaults": {
+              "unit": "none",
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 2,
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                },
+                "axisSoftMax": 3
+              },
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
               "decimals": 0
             },
             "overrides": []
           },
-          "options": {}
-        },
-        {
+          "options": {
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "id": 11,
-          "title": "Human overrides",
-          "type": "timeseries",
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "gridPos": {
-            "x": 0,
-            "y": 29,
-            "w": 8,
+            "x": 18,
+            "y": 14,
+            "w": 6,
             "h": 8
           },
           "targets": [
@@ -522,31 +1005,148 @@ data:
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "${datasource}"
               },
               "expr": "sum(increase(lifeboat_overrides_total[5m]))",
               "legendFormat": "overrides"
             }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0
-            },
-            "overrides": []
-          },
-          "options": {}
+          ]
         },
         {
+          "type": "row",
+          "title": "Users of the web service (C1)",
+          "collapsed": false,
+          "panels": [],
           "id": 12,
-          "title": "Free CPU in cluster (millicores)",
+          "gridPos": {
+            "x": 0,
+            "y": 22,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
           "type": "timeseries",
+          "title": "Requests per second by tier",
+          "description": "Traffic each tier is serving. C1 is the public web service Lifeboat protects; the grey tiers are the work it pauses to free capacity.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "C1"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "purple"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "C2"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#CCCCDC"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "C3"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#8E8E8E"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "C4"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#5A5A5A"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 13,
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "gridPos": {
-            "x": 16,
-            "y": 21,
+            "x": 0,
+            "y": 23,
             "w": 8,
             "h": 8
           },
@@ -555,17 +1155,628 @@ data:
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "${datasource}"
               },
-              "expr": "1000 * (sum(kube_node_status_allocatable{resource=\"cpu\"}) - sum(kube_pod_container_resource_requests{resource=\"cpu\"}))",
-              "legendFormat": "free mCPU"
+              "expr": "sum(rate(http_requests_total[1m])) by (tier)",
+              "legendFormat": "{{tier}}"
             }
-          ],
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "C1 requests on time",
+          "description": "Share of C1 requests answered within 0.5 s. Below the dashed 95 % line users start to notice.",
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed"
+                }
+              },
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "transparent",
+                    "value": 0.95
+                  }
+                ]
+              },
+              "decimals": 0,
+              "min": 0,
+              "max": 1
+            },
             "overrides": []
           },
-          "options": {}
+          "options": {
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 14,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 23,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(rate(http_request_duration_seconds_bucket{tier=\"C1\", le=\"0.5\"}[1m])) / sum(rate(http_request_duration_seconds_count{tier=\"C1\"}[1m]))",
+              "legendFormat": "on time"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "C1 p95 response time",
+          "description": "95th percentile response time of C1. Above the 0.5 s line (shaded red) Lifeboat treats C1 as struggling and moves to L3.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed+area"
+                },
+                "axisSoftMax": 0.6
+              },
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.5
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 15,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 23,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tier=\"C1\"}[1m])) by (le))",
+              "legendFormat": "C1 p95"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Capacity Lifeboat freed",
+          "collapsed": false,
+          "panels": [],
+          "id": 16,
+          "gridPos": {
+            "x": 0,
+            "y": 31,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Triage plan steps",
+          "description": "Steps in the TriagePlan over time. Done steps rise as batch jobs are checkpointed and paused; waiting steps should drop back to zero quickly.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "stepAfter",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "done"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "blue"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "pending"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "yellow"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 17,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 32,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_plan_steps) by (state)",
+              "legendFormat": "{{state}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Free CPU in the cluster",
+          "description": "Allocatable CPU minus what pods have requested, in millicores. It rises when Lifeboat pauses work and falls as C1 scales up into it. Needs kube-state-metrics, so it is empty outside the cluster.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "suffix: mCPU",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 0,
+              "noValue": "Shown in the cluster only (needs kube-state-metrics)"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 18,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 32,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "1000 * (sum(kube_node_status_allocatable{resource=\"cpu\"}) - sum(kube_pod_container_resource_requests{resource=\"cpu\"}))",
+              "legendFormat": "free CPU"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Controller health",
+          "collapsed": false,
+          "panels": [],
+          "id": 19,
+          "gridPos": {
+            "x": 0,
+            "y": 40,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "type": "state-timeline",
+          "title": "Executor role per replica",
+          "description": "Which Lifeboat replica is active over time. Exactly one should be active; a gap means no one is acting, two at once raises an alert.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#8E8E8E"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Standby",
+                      "color": "#8E8E8E",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "Active",
+                      "color": "blue",
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              "custom": {
+                "fillOpacity": 80,
+                "lineWidth": 0
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showValue": "auto",
+            "mergeValues": true,
+            "alignValue": "left",
+            "rowHeight": 0.8,
+            "legend": {
+              "showLegend": false,
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "id": 20,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 41,
+            "w": 12,
+            "h": 7
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max by (pod) (lifeboat_is_active_executor)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Control loop age",
+          "description": "Seconds since the control loop last finished a tick. Above 30 s (shaded) the LifeboatLoopStalled alert fires.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed+area"
+                },
+                "axisSoftMax": 35
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 30
+                  }
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 21,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 41,
+            "w": 6,
+            "h": 7
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_loop_age_seconds) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Control loop tick time",
+          "description": "How long the last tick took. It must stay well under the 15 s Lease, or the standby could take over a live executor.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "gradientMode": "opacity",
+                "showPoints": "never",
+                "spanNulls": false,
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "lineInterpolation": "smooth",
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed"
+                },
+                "axisSoftMax": 17
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 15
+                  }
+                ]
+              },
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "showLegend": true,
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 22,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 41,
+            "w": 6,
+            "h": 7
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(lifeboat_tick_seconds) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
         }
       ]
     }
