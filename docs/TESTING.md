@@ -6,7 +6,11 @@ Follow the steps in order; each says what you should see.
 Steps 1-2 need only Python (2 minutes). Steps 3-8 run the whole system on a laptop cluster
 (about 30 minutes, most of it waiting).
 
-Repository: https://github.com/aarrcane/lifeboat, submitted tag **`v1.0-submission`**.
+We submitted the code two ways; both hold the same files:
+
+- **GitHub:** https://github.com/aarrcane/lifeboat, tag **`v1.0-submission`**.
+- **Container image:** `GROUP21_lifeboat_image.tar.gz`, the image `group21/lifeboat:v1.0-submission`
+  (all the source plus the Python packages; running it runs the unit tests). See step 1.
 
 ## 0. What you need
 
@@ -20,12 +24,28 @@ Repository: https://github.com/aarrcane/lifeboat, submitted tag **`v1.0-submissi
 
 **Windows:** run every command inside a WSL2 Ubuntu terminal (the scripts are bash), with Docker
 Desktop's WSL integration turned on. Install commands for each tool are in `docs/CLUSTER.md`, section A.1.
+On Ubuntu, `python3 -m venv` also needs `sudo apt install -y python3-venv`.
 
 ## 1. Get the code and the Python packages
 
+**From GitHub:**
 ```bash
 git clone https://github.com/aarrcane/lifeboat && cd lifeboat
 git checkout v1.0-submission
+```
+**Or from the submitted image file** (needs only Docker):
+```bash
+docker load -i GROUP21_lifeboat_image.tar.gz
+IMG=group21/lifeboat:v1.0-submission
+docker run --rm $IMG          # runs the unit tests: 130 passed
+# copy the source out of the image into ./lifeboat
+mkdir lifeboat
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD/lifeboat:/out" $IMG cp -r /src/. /out
+cd lifeboat
+```
+Then, either way:
+```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
 ```

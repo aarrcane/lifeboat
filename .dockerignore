@@ -1,0 +1,11 @@
+# Never send local secrets or state into an image build
+.env
+.aws-cluster.env
+kubeconfig-aws.yaml
+*.pem
+.git/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+checkpoints-local/

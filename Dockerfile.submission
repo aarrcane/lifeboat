@@ -1,0 +1,15 @@
+# Submission image: the whole Lifeboat source (as tagged v1.0-submission) with the Python
+# packages for the unit tests. It is the "container image" copy of the code; the system itself
+# runs on Kubernetes from the three images `make images` builds.
+#
+#   docker build -f Dockerfile.submission -t group21/lifeboat:v1.0-submission .
+#   docker run --rm group21/lifeboat:v1.0-submission                      # unit tests: 130 passed
+#   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/lifeboat:/out" \
+#     group21/lifeboat:v1.0-submission cp -r /src/. /out                  # copy the source out
+FROM python:3.12-slim
+WORKDIR /src
+ENV PYTHONDONTWRITEBYTECODE=1
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements-dev.txt
+COPY . .
+CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]

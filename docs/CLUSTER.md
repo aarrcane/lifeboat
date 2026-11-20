@@ -24,7 +24,7 @@ You need Docker, k3d, kubectl, helm, make and Python 3.
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then Settings → Resources → WSL integration → turn on Ubuntu. Give Docker at least **4 CPUs and 8 GB RAM** (Prometheus + 3 servers are heavy).
 2. In the Ubuntu terminal:
    ```bash
-   sudo apt update && sudo apt install -y make python3-pip git
+   sudo apt update && sudo apt install -y make python3-pip python3-venv git
    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
    sudo snap install kubectl --classic
    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -38,7 +38,7 @@ Check: `docker info`, `k3d version`, `kubectl version --client`, `helm version`.
 
 ```bash
 git clone https://github.com/aarrcane/lifeboat && cd lifeboat
-pip install -r requirements-dev.txt
+python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt
 make cluster          # 3 servers, ~1 min
 make import           # build the 3 images and copy them onto every server
 make deploy           # namespaces, CRD, RBAC, secrets (.env made for you), MinIO, Lifeboat x2

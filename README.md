@@ -15,6 +15,7 @@ as many emergency requests within 0.5 s, and lost no paused work.
 ## For the marker
 | What | Where |
 |---|---|
+| Code as a container image | `GROUP21_lifeboat_image.tar.gz` (submitted file), built by [Dockerfile.submission](Dockerfile.submission) |
 | Step-by-step testing instructions | **[docs/submission/GROUP21_INSTRUCTIONS.pdf](docs/submission/GROUP21_INSTRUCTIONS.pdf)** (source: [docs/TESTING.md](docs/TESTING.md)) |
 | Report | [docs/report/REPORT.md](docs/report/REPORT.md) |
 | Measured results (E1-E5) and figures | [results/](results/), format in [docs/RESULTS_FORMAT.md](docs/RESULTS_FORMAT.md) |
