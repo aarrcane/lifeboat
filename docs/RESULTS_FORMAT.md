@@ -8,8 +8,8 @@ setup** (proposal Section 6) and put every run in the same CSV with a `run` colu
 | --- | --- | --- | --- |
 | E1/E2 | `e1_e2_summary.csv`, `runs/<setup>-<run>/timeline.csv` | `scripts/run_experiment.py` on the cluster | **done** (AWS, 3 runs per setup, 14-15 Nov). The old model numbers are in `model/e1_e2_model.csv` (`scripts/run_p5_baseline.py --dry-run`): a model prediction, never a result |
 | E3 | `e3_work_saved.csv` | `scripts/run_experiment.py` from the worker events (`lifeboat/e3_collect.py`) | **done** (same AWS runs) |
-| E4 | `e4_alerts.csv` | `scripts/export_e4.py` (P2's evaluation) | done (offline replay through the real voter) |
-| E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` on the cluster (P3 + P6) | `kill-active` done on AWS (3 kills); `kill-active-x3` not run yet |
+| E4 | `e4_alerts.csv` | `scripts/export_e4.py` (evaluation logic from `scripts/demo_p2.py`) | done (offline replay through the real voter) |
+| E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` on the cluster | done on AWS: `kill-active`, 3 kills |
 
 ## E1/E2 `e1_e2_summary.csv` (`scripts/run_experiment.py`)
 
@@ -36,7 +36,7 @@ python3 scripts/run_experiment.py --setup all --runs 3   # the matrix (AWS, on s
 python scripts/plot_results.py
 ```
 
-## E3 `e3_work_saved.csv` (P3)
+## E3 `e3_work_saved.csv`
 
 | Column | Meaning |
 | --- | --- |
@@ -93,7 +93,7 @@ scenario × voter (`naive` = any one source, `lifeboat` = 2 of 3). Regenerate wi
 Run it while a crisis replay is going (Lifeboat at L2, plan written):
 
 ```bash
-make demo                                          # P4: deploy + replay + load
+make demo                                          # deploy + replay + load
 python scripts/e5_crash_test.py --runs 3
 python scripts/e5_crash_test.py --runs 3 --repeat 3
 python scripts/plot_results.py

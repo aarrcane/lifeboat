@@ -1,8 +1,8 @@
 # In-cluster Locust run of loadtest/locustfile.py (the 20x surge shape), created by `make load`.
 # The locustfile is mounted from the ConfigMap `locustfile` that the Makefile creates.
 # Results: `kubectl -n lifeboat logs job/locust | grep ^RESULT` (surge window only).
-# Good enough for demos. For the measured experiments (E1/E2), P5 may prefer running Locust
-# outside the cluster so the load generator does not compete for the same CPUs.
+# Used for the demo and by scripts/run_experiment.py for E1/E2. The load generator runs in the
+# cluster, so it shares the nodes' CPUs (the same for every setup measured).
 apiVersion: batch/v1
 kind: Job
 metadata: {name: locust, namespace: lifeboat, labels: {app: lifeboat-load}}

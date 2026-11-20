@@ -4,7 +4,7 @@ Two ways, same commands after the cluster exists:
 
 | | **A. Laptop (k3d)** | **B. AWS (final run)** |
 |---|---|---|
-| Who | everyone, from day one | P4 runs it; the team shares it |
+| Use | testing and demos on one laptop | the measured experiments (E1-E5) |
 | What | 3 k3s servers with embedded etcd, as Docker containers | 3 EC2 servers with k3s + embedded etcd, S3 for checkpoints |
 | Cost | free | about US$0.26/h while running (3 x t3.large + Elastic IP) from Learner Lab credit |
 | Create | `make cluster` | `scripts/aws/up.sh` |
@@ -63,7 +63,7 @@ make status
 | open Grafana | `kubectl -n monitoring port-forward svc/kps-grafana 3000:80`, then http://localhost:3000 (user `admin`; password: `kubectl -n monitoring get secret kps-grafana -o jsonpath='{.data.admin-password}' \| base64 -d`) |
 | delete the cluster | `make cluster-down` |
 
-### 4. Show that the cluster survives a dead server (progress demo)
+### 4. Show that the cluster survives a dead server
 
 ```bash
 kubectl get nodes                       # 3 Ready

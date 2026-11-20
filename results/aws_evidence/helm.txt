@@ -1,6 +1,6 @@
 $ helm list -A
 # 2026-11-15T05:20:44Z
-WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: /mnt/c/Users/tdmca/OneDrive/Desktop/Y2T1/Cloud/06 - Project/lifeboat/kubeconfig-aws.yaml
-WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: /mnt/c/Users/tdmca/OneDrive/Desktop/Y2T1/Cloud/06 - Project/lifeboat/kubeconfig-aws.yaml
+WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: <repo>/kubeconfig-aws.yaml
+WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: <repo>/kubeconfig-aws.yaml
 NAME	NAMESPACE 	REVISION	UPDATED                                	STATUS  	CHART                       	APP VERSION
 kps 	monitoring	2       	2026-11-14 23:21:54.735022728 +0800 +08	deployed	kube-prometheus-stack-93.2.2	v0.95.2    

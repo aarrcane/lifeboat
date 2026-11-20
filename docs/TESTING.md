@@ -94,9 +94,9 @@ Open a second terminal (same folder) to watch:
 ```bash
 kubectl -n lifeboat get triageplans -w
 ```
-In the first terminal:
+In the first terminal (the first line shortens the step-down for the demo):
 ```bash
-kubectl -n lifeboat set env deploy/lifeboat LIFEBOAT_CALM_MINUTES=1   # shorter step-down for the demo
+kubectl -n lifeboat set env deploy/lifeboat LIFEBOAT_CALM_MINUTES=1
 make demo
 ```
 `make demo` starts a 20x traffic surge (Locust) and replays the experiment's warnings. Expected,
@@ -112,37 +112,60 @@ counting from when the replay starts:
 
 Check the batch jobs resumed where they stopped:
 ```bash
-kubectl -n lifeboat-demo logs job/c3-analytics | grep -E "starting at|checkpoint"
+kubectl -n lifeboat-demo logs job/c3-analytics \
+  | grep -E "starting at|checkpoint"
 ```
 
 ## 6. Crash the active controller mid-triage
 
 Run `make reset`, then `make demo` again. While the plan is at level 2 or 3:
 ```bash
-HOLDER=$(kubectl -n lifeboat get lease lifeboat-executor -o jsonpath='{.spec.holderIdentity}')
+HOLDER=$(kubectl -n lifeboat get lease lifeboat-executor \
+  -o jsonpath='{.spec.holderIdentity}')
 kubectl -n lifeboat delete pod "$HOLDER" --grace-period=0 --force
-kubectl -n lifeboat get lease lifeboat-executor -o custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions -w
+COLS=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions
+kubectl -n lifeboat get lease lifeboat-executor -o custom-columns=$COLS -w
 ```
 Expected within about 20 s: the holder changes to the other pod, `TRANSITIONS` (the takeover
 number) goes up by 1, and the TriagePlan keeps its level and steps. The measured version of
-this test is `python scripts/e5_crash_test.py --runs 3`.
+this test:
+```bash
+python scripts/e5_crash_test.py --runs 3
+```
 
 ## 7. Optional checks
 
-- **Forged reading is refused:**
-  ```bash
-  kubectl -n lifeboat port-forward deploy/lifeboat 8081:8081 &
-  curl -s -X POST localhost:8081/readings -d '{"source":"S1","level":2,"ts":1,"expires_at":9999999999,"sig":"forged"}'
-  ```
-  Expected: `{"error": "bad_signature"}`.
-- **Human override:** see "Human override" in `README.md` (lock at L2, then clear).
-- **Live data.gov.sg feeds:** `make feeds`, wait 5 minutes, then
-  `kubectl -n lifeboat logs -l app=lifeboat-feed --tail=5`. Expected: `"sent": [202, 202]`
-  (each reading reached both replicas). Turn them off with `make feeds-off`.
-- **Dashboard:** `kubectl -n monitoring port-forward svc/kps-grafana 3000:80`, open
-  http://localhost:3000, dashboard "Lifeboat: crisis triage" (password command in `docs/CLUSTER.md`).
-- **A server dies, the cluster lives:** `docker stop k3d-lifeboat-server-1`, `kubectl get nodes`
-  still answers and `kubectl -n lifeboat get triageplans` still works; `docker start k3d-lifeboat-server-1`.
+**Forged reading is refused.** Expected: `{"error": "bad_signature"}`.
+```bash
+kubectl -n lifeboat port-forward deploy/lifeboat 8081:8081 &
+BODY='{"source":"S1","level":2,"ts":1,'
+BODY+='"expires_at":9999999999,"sig":"forged"}'
+curl -s -X POST localhost:8081/readings -d "$BODY"
+```
+
+**Human override:** see "Human override" in `README.md` (lock at L2, then clear).
+
+**Live data.gov.sg feeds.** Start them, wait 5 minutes, then read the feed logs. Expected:
+`"sent": [202, 202]` (each reading reached both replicas). The last line turns them off.
+```bash
+make feeds
+kubectl -n lifeboat logs -l app=lifeboat-feed --tail=5
+make feeds-off
+```
+
+**Dashboard.** Open http://localhost:3000, dashboard "Lifeboat: crisis triage" (user `admin`,
+password command in `docs/CLUSTER.md`).
+```bash
+kubectl -n monitoring port-forward svc/kps-grafana 3000:80
+```
+
+**A server dies, the cluster lives.** After the `docker stop`, both `kubectl` commands still answer.
+```bash
+docker stop k3d-lifeboat-server-1
+kubectl get nodes
+kubectl -n lifeboat get triageplans
+docker start k3d-lifeboat-server-1
+```
 
 ## 8. Clean up
 
@@ -153,12 +176,22 @@ make cluster-down    # delete the whole laptop cluster
 
 ## If something goes wrong
 
-| You see | Do |
-| --- | --- |
-| `ImagePullBackOff` | `make import restart` |
-| pods `Pending`, "Insufficient cpu" during the demo | expected: that is what Lifeboat triages |
-| `make itest` fails | it names the failing check; `kubectl -n lifeboat logs deploy/lifeboat` |
-| Docker runs out of memory | give Docker 8 GB, or skip `make monitoring` (`make cluster import deploy workloads wait`) |
+**`ImagePullBackOff`:** rebuild and reload the images.
+```bash
+make import restart
+```
+
+**Pods `Pending`, "Insufficient cpu" during the demo:** expected, that is what Lifeboat triages.
+
+**`make itest` fails:** it names the failing check. Look at the controller's log:
+```bash
+kubectl -n lifeboat logs deploy/lifeboat
+```
+
+**Docker runs out of memory:** give Docker 8 GB, or bring everything up without monitoring:
+```bash
+make cluster import deploy workloads wait
+```
 
 The experiments in the report (E1-E5) ran on AWS; `docs/CLUSTER.md` section B rebuilds that
 cluster and `make experiment RUNS=3` repeats them (about 2.5 hours).
