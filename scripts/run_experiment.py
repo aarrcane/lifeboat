@@ -21,7 +21,7 @@ Timeline of one run (speed 1):
 
 Writes results/runs/<setup>-<run>/{timeline.csv,locust.log,e3.log}, appends one row per run to
 results/e1_e2_summary.csv and one row per batch workload to results/e3_work_saved.csv
-(columns in docs/RESULTS_FORMAT.md).
+(columns in README.md, "Results files").
 """
 from __future__ import annotations
 

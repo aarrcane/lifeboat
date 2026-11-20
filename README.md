@@ -12,13 +12,15 @@ On a 3-server k3s cluster on AWS (20x surge, 60 s warning) Lifeboat had 7 emerge
 before the surge, reached full capacity 77 s into it (HPA baseline: 163 s), answered 2.5 times
 as many emergency requests within 0.5 s, and lost no paused work.
 
+![Figure 1. Three warning sources vote on a level, the planner decides what to pause, and the active executor carries out the plan while a standby waits.](docs/report/architecture.png)
+
 ## For the marker
 | What | Where |
 |---|---|
 | Code as a container image | `GROUP21_lifeboat_image.tar.gz` (submitted file), built by [Dockerfile.submission](Dockerfile.submission) |
 | Step-by-step testing instructions | **[docs/submission/GROUP21_INSTRUCTIONS.pdf](docs/submission/GROUP21_INSTRUCTIONS.pdf)** (source: [docs/TESTING.md](docs/TESTING.md)) |
-| Report | [docs/report/REPORT.md](docs/report/REPORT.md) |
-| Measured results (E1-E5) and figures | [results/](results/), format in [docs/RESULTS_FORMAT.md](docs/RESULTS_FORMAT.md) |
+| Report | `GROUP21.pdf` (submitted separately) |
+| Measured results (E1-E5) and figures | [results/](results/), files explained in [Results files](#results-files) |
 | Cluster guide (laptop k3d and AWS), troubleshooting | [docs/CLUSTER.md](docs/CLUSTER.md) |
 
 Fastest check (Python 3.12, no cluster, about 2 minutes):
@@ -54,7 +56,7 @@ below and, with what you should see at each step, in the instructions PDF.
 | `scripts/p6_live_check.py` | real Prometheus + webapp + Lifeboat loop, no cluster | E1-E5 |
 | `deploy/monitoring/alert-rules.yaml` | 8 Prometheus alerts, drawn on the dashboard | video |
 | `scripts/plot_results.py`, `export_e4.py`, `e5_crash_test.py` | results CSVs -> figures; E4 export; E5 kill test on a cluster | E1-E5 |
-| `docs/RESULTS_FORMAT.md`, `docs/report/`, `docs/submission/` | CSV contracts; report; testing instructions (PDF, source `docs/TESTING.md`) | report |
+| `docs/report/architecture.png`, `docs/submission/` | Figure 1; testing instructions (PDF, source `docs/TESTING.md`) | report |
 | `lifeboat/controller.py`, `operator.py` | sense-decide-act loop, Kopf entrypoint | Fig. 1 |
 | `feeds/`, `deploy/feeds/` | PUB (S1) / NEA (S2) feed functions, run as CronJobs (`make feeds`; OpenFaaS packaging in `feeds/stack.yml`), replayer | Sec. 4.1, 5 |
 | `workloads/` | C1/C2 web app, C3/C4 checkpointing worker | Sec. 6 |
@@ -97,11 +99,24 @@ curl -s -X POST localhost:8081/override -H "X-Lifeboat-Token: $TOKEN" -d '{"leve
 ```
 `level` must be `null` or 0-3 (anything else: 400). `make reset` removes the override.
 
-## Status (as of the final AWS runs, 14-15 Nov)
-- **Measured on AWS** (3 x t3.large, k3s with embedded etcd): E1-E3 for B0, B1, B2 and Lifeboat, 3 runs each (`results/e1_e2_summary.csv`, `results/runs/`); E5 kill test (`results/e5_crash.csv`); evidence in `results/aws_evidence/`. E4 is an offline replay through the real voter (`results/e4_alerts.csv`).
-- **Unit tests** (`make test`): voter, ingest validation, planner, executor crash/takeover and one-undo-per-tick, forecast, checkpoint, discovery, feed parsers, controller ticks (takeover keeps the crisis, outage silences the forecast vote, override shared across replicas).
-- **Integration test** (`make itest`, also in CI) against a real k3s API server as the lifeboat ServiceAccount, so the namespaced RBAC is checked too: L2 triage, standby takeover with fencing, revert to original settings, and a human override sent to the standby that the leader carries out.
-- **P6 monitoring and forecast**: every dashboard query, the PromQL in `config.py` and the alert rules checked against a real Prometheus scraping the real webapp (`scripts/p6_live_check.py`, no cluster). Forecast alpha tuned to 0.3 by `scripts/demo_p6.py` on synthetic traces; the sweep was re-run after the forecast clamp fix (f8007ba) with the same result: 81 s lead on a gradual surge, 0 false L2. Not yet confirmed on the AWS cluster: PodMonitor scraping and the Grafana sidecar loading the dashboard.
-- **Shared between replicas** through etcd: the TriagePlan (level, steps, takeover number) and the human override. Still per replica: the calm-period timer (a new leader steps down one calm period after it took over) and the reading book (feeds send every reading to both pods).
-- **Known limits** (also in the report): C1 is sized from the traffic it *serves*, so a sudden surge is followed step by step; the planner checks cluster-wide free CPU, not per-node fit; Lease expiry assumes NTP-synchronised clocks; the experiments shorten the calm period to 1 minute; one signing key for all feeds and the override.
-- Everyone deploying to the same cluster needs the same `.env` (shared privately, see docs/CLUSTER.md).
+## Results files
+Every experiment ends as one CSV in `results/` (E1-E3 and E5 measured on AWS, 3 x t3.large, 3 runs
+per setup; E4 is an offline replay through the real voter). `python scripts/plot_results.py`
+turns them into `results/figures/`; cluster evidence is in `results/aws_evidence/`.
+
+| Exp | CSV | Made by | Columns |
+| --- | --- | --- | --- |
+| E1/E2 | `e1_e2_summary.csv` | `scripts/run_experiment.py` | `setup` (B0, B1, B2, lifeboat), `run`; `e1_surge_to_capacity_s` (t = 150 s until C1 has 10 ready pods; negative = ready before the surge, empty = never); `alert_to_ready_s` (first level change to all planned C1 pods ready); `c1_ready_at_surge`; `c1_served_pct`, `p50_ms`, `p95_ms` (Locust, surge window, served = 200 within 0.5 s); `c2_served_pct` |
+| E1 | `runs/<setup>-<run>/timeline.csv` | same | one row per second: `t,c1_ready,c1_spec,level,plan_steps,c3_suspend,c3_active,c4_suspend,c4_active,placeholder_ready`; `locust.log` and `e3.log` beside it |
+| E3 | `e3_work_saved.csv` | same, from worker lifecycle events in the checkpoint store | `setup,run,workload`; `progress_lost_s` (work redone after resuming); `restore_s` (crisis end until running again at original settings) |
+| E4 | `e4_alerts.csv` | `scripts/export_e4.py` | `scenario,true_crisis,voter,peak_level,false_l2_alarms,false_l2_s,missed,flips` (`naive` = any one source, `lifeboat` = 2 of 3) |
+| E5 | `e5_crash.csv` | `scripts/e5_crash_test.py` (during a replay at L2) | `test,run,takeover_s`; plan steps total / left half done / mismatched (target 0); `takeover_increment` (fencing, at least 1); level and steps before and after; `plan_kept`; Lifeboat CPU and memory |
+
+`results/model/e1_e2_model.csv` (`scripts/run_p5_baseline.py`) is the pre-AWS model prediction,
+not a measurement.
+
+## Known limits
+C1 is sized from the traffic it *serves*, so a sudden surge is followed step by step; the planner
+checks cluster-wide free CPU, not per-node fit; Lease expiry assumes NTP-synchronised clocks; the
+experiments shorten the calm period to 1 minute; one signing key for all feeds and the override.
+Everyone deploying to the same cluster needs the same `.env` (shared privately, see `docs/CLUSTER.md`).

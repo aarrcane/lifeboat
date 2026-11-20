@@ -1,6 +1,6 @@
 """P6 data pipeline: results/*.csv -> figures for the report (E1-E5).
 
-Each experiment has one CSV contract (docs/RESULTS_FORMAT.md). A plotter runs when its CSV
+Each experiment has one CSV contract (README.md, "Results files"). A plotter runs when its CSV
 exists, otherwise it says who owes the data, so the figure list doubles as a progress check.
 
   python scripts/plot_results.py            # writes results/figures/*.png (needs matplotlib)
@@ -119,7 +119,7 @@ def _mean_by(rows: list[dict], key: str, col: str) -> dict[str, float]:
 
 
 def e3(plt) -> list[str]:
-    """results/e3_work_saved.csv: setup,run,workload,progress_lost_s,restore_s (docs/RESULTS_FORMAT.md)."""
+    """results/e3_work_saved.csv: setup,run,workload,progress_lost_s,restore_s (README.md, "Results files")."""
     rows = _rows("e3_work_saved.csv")
     order = [s for s in ("B0", "B1", "B2", "lifeboat") if any(r["setup"] == s for r in rows)]
     lost, back = _mean_by(rows, "setup", "progress_lost_s"), _mean_by(rows, "setup", "restore_s")
@@ -162,7 +162,7 @@ def e4(plt) -> list[str]:
 
 
 def e5(plt) -> list[str]:
-    """results/e5_crash.csv from scripts/e5_crash_test.py (docs/RESULTS_FORMAT.md)."""
+    """results/e5_crash.csv from scripts/e5_crash_test.py (README.md, "Results files")."""
     rows = _rows("e5_crash.csv")
     tests = list(dict.fromkeys(r["test"] for r in rows))
     take = _mean_by([r for r in rows if r["takeover_s"] != ""], "test", "takeover_s")

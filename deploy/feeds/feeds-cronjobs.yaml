@@ -4,7 +4,7 @@
 # Same code as the OpenFaaS functions in feeds/stack.yml (feeds/handler.py). We schedule it with
 # Kubernetes CronJobs because OpenFaaS CE no longer ships the Function CRD/operator and always
 # pulls function images from a registry, which our k3s nodes (images imported with
-# `make import`) do not use. See docs/report/REPORT.md Section 4.1.
+# `make import`) do not use. See the report, Section 4.1.
 #
 # `make feeds` applies this file; `make feeds-off` removes it. `make replay` and `make reset`
 # run `feeds-off` first, because live S1/S2 readings would replace the replayed ones in the
