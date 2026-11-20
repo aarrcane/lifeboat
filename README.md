@@ -1,5 +1,42 @@
 # Lifeboat: Crisis-Aware Capacity Triage on Kubernetes
-CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
+CSC3104 Cloud and Distributed Computing, Group 21. Submitted tag: **`v1.0-submission`**.
+
+When a flash flood hits, emergency websites get a traffic surge while sharing a cluster with
+analytics and backups, and Kubernetes only reacts once they are already overloaded. Lifeboat is a
+small Kubernetes controller that turns early warnings (PUB flood alerts, NEA rainfall and a
+forecast of the cluster's own traffic) into a severity level through a 2-of-3 vote, then makes
+room for the emergency service *before* the surge by pausing, not killing, less important work.
+Two replicas share the plan through etcd, so a standby finishes the triage if the active one crashes.
+
+On a 3-server k3s cluster on AWS (20x surge, 60 s warning) Lifeboat had 7 emergency pods ready
+before the surge, reached full capacity 77 s into it (HPA baseline: 163 s), answered 2.5 times
+as many emergency requests within 0.5 s, and lost no paused work.
+
+## For the marker
+| What | Where |
+|---|---|
+| Step-by-step testing instructions | **[docs/submission/GROUP21_INSTRUCTIONS.pdf](docs/submission/GROUP21_INSTRUCTIONS.pdf)** (source: [docs/TESTING.md](docs/TESTING.md)) |
+| Report | [docs/report/REPORT.md](docs/report/REPORT.md) |
+| Measured results (E1-E5) and figures | [results/](results/), format in [docs/RESULTS_FORMAT.md](docs/RESULTS_FORMAT.md) |
+| Cluster guide (laptop k3d and AWS), troubleshooting | [docs/CLUSTER.md](docs/CLUSTER.md) |
+
+Fastest check (Python 3.12, no cluster, about 2 minutes):
+```bash
+git clone https://github.com/aarrcane/lifeboat && cd lifeboat && git checkout v1.0-submission
+python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt
+make test                                                # expected: 130 passed
+```
+The whole system on a laptop cluster (`make up`, `make itest`, `make demo`) is in the quick start
+below and, with what you should see at each step, in the instructions PDF.
+
+## Team
+| Role | Member |
+|---|---|
+| Planner, checkpoints, executor, HA and crash tests | Cheung Kai Chun Ronald |
+| Signals, voter and feeds | Lucas Leow |
+| Cluster, deploy, AWS and CI | Hanzalah Bin Mohamad Hisam |
+| Web load and baselines | Faris Zharfan |
+| Observability, forecast, report and video | Muhammad 'Afif Bin Muhd Lotfi Jarhom |
 
 ## Layout
 | Path | What | Proposal ref |
@@ -16,7 +53,7 @@ CSC3104 Group 21 - see `docs/WORK_SPLIT.md` for who builds what.
 | `scripts/p6_live_check.py` | real Prometheus + webapp + Lifeboat loop, no cluster | E1-E5 |
 | `deploy/monitoring/alert-rules.yaml` | 8 Prometheus alerts, drawn on the dashboard | video |
 | `scripts/plot_results.py`, `export_e4.py`, `e5_crash_test.py` | results CSVs -> figures; E4 export; E5 kill test on a cluster | E1-E5 |
-| `docs/RESULTS_FORMAT.md`, `docs/report/` | CSV contracts; report draft and video plan | report |
+| `docs/RESULTS_FORMAT.md`, `docs/report/`, `docs/submission/` | CSV contracts; report; testing instructions (PDF, source `docs/TESTING.md`) | report |
 | `lifeboat/controller.py`, `operator.py` | sense-decide-act loop, Kopf entrypoint | Fig. 1 |
 | `feeds/`, `deploy/feeds/` | PUB (S1) / NEA (S2) feed functions, run as CronJobs (`make feeds`; OpenFaaS packaging in `feeds/stack.yml`), replayer | Sec. 4.1, 5 |
 | `workloads/` | C1/C2 web app, C3/C4 checkpointing worker | Sec. 6 |

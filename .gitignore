@@ -10,3 +10,9 @@ checkpoints-local/
 kubeconfig-aws.yaml
 *.pem
 results/*.tmp
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

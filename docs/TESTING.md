@@ -6,7 +6,7 @@ Follow the steps in order; each says what you should see.
 Steps 1-2 need only Python (2 minutes). Steps 3-8 run the whole system on a laptop cluster
 (about 30 minutes, most of it waiting).
 
-Repository: https://github.com/aarrcane/lifeboat (submitted tag: see the submission form).
+Repository: https://github.com/aarrcane/lifeboat, submitted tag **`v1.0-submission`**.
 
 ## 0. What you need
 
@@ -25,6 +25,7 @@ Desktop's WSL integration turned on. Install commands for each tool are in `docs
 
 ```bash
 git clone https://github.com/aarrcane/lifeboat && cd lifeboat
+git checkout v1.0-submission
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
@@ -34,8 +35,8 @@ pip install -r requirements-dev.txt
 ```bash
 make test
 ```
-Expected: `129 passed` (all green). These cover the 2-of-3 voter, signed readings and the
-ingest checks, the planner, the executor's crash and takeover logic (Figure 2 of the report),
+Expected: `130 passed` (all green). These cover the 2-of-3 voter, signed readings and the
+ingest checks, the planner, the executor's crash and takeover logic (Section 2.4 of the report),
 the forecast, checkpoints, the feed parsers and the experiment maths.
 
 ## 3. Start the cluster and everything on it
